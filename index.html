@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>背书</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="背书">
+<meta name="theme-color" content="#17323F">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<style>
+:root{
+  --ink:#17323F; --ink-soft:#2E4A55; --paper:#EEF1F3; --card:#fff;
+  --line:#DBE2E6; --mute:#6B7C84; --gold:#C98A17; --gold-bg:#FBF1DC;
+  --ochre:#8C4A3C; --pine:#3E6B5A;
+  --base:17px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+  font-size:var(--base); line-height:1.7; color:var(--ink); background:var(--paper);
+  -webkit-font-smoothing:antialiased; overscroll-behavior-y:none;
+}
+.num{font-family:"DIN Alternate","Helvetica Neue",sans-serif;font-weight:600;letter-spacing:-.02em}
+button{font:inherit;color:inherit;border:none;background:none;cursor:pointer}
+input,textarea,select{font:inherit;color:inherit}
+
+#app{max-width:640px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 14px) 16px 96px}
+.hidden{display:none !important}
+
+/* ---- tabs ---- */
+#tabs{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;
+  background:rgba(255,255,255,.94);backdrop-filter:saturate(180%) blur(16px);
+  border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)
+}
+#tabs button{flex:1;padding:11px 0 9px;font-size:.72rem;color:var(--mute);line-height:1.3}
+#tabs button .ic{display:block;font-size:1.05rem;margin-bottom:1px}
+#tabs button.on{color:var(--ink);font-weight:600}
+
+/* ---- shared ---- */
+.card{background:var(--card);border-radius:14px;padding:18px;margin-bottom:14px}
+.eyebrow{font-size:.72rem;letter-spacing:.14em;color:var(--mute);display:block}
+.muted{color:var(--mute);font-size:.85rem}
+.btn{display:block;width:100%;padding:16px;border-radius:12px;background:var(--ink);
+  color:#fff;font-size:1.05rem;font-weight:600;text-align:center}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.btn.danger{background:transparent;color:var(--ochre);border:1.5px solid #E5CFC9}
+.btn+.btn{margin-top:10px}
+.chip{display:inline-block;padding:6px 14px;margin:0 8px 8px 0;border-radius:999px;
+  background:var(--paper);font-size:.85rem;color:var(--ink-soft);border:1.5px solid transparent}
+.chip.on{background:var(--ink);color:#fff}
+.row{display:flex;align-items:center;margin-top:11px;gap:10px}
+.row .nm{width:110px;font-size:.85rem;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .bar{flex:1;height:7px;background:var(--paper);border-radius:999px;overflow:hidden}
+.row .bar i{display:block;height:100%;background:var(--ink-soft)}
+.row .bar i.o{background:var(--ochre)}
+.row .n{width:34px;text-align:right;font-size:.85rem;color:var(--mute)}
+
+/* ---- today ---- */
+.hero{padding:22px 4px 6px}
+.hero .big{font-size:4.4rem;line-height:1}
+.hero .unit{font-size:1.05rem;margin-left:8px;color:var(--ink-soft)}
+.pbar{height:6px;background:#DCE3E7;border-radius:999px;overflow:hidden;margin:6px 4px 6px}
+.pbar i{display:block;height:100%;background:var(--gold);transition:width .3s}
+.duo{display:flex;gap:10px;margin-top:4px}
+.duo button{flex:1;padding:15px 0;background:#fff;border-radius:12px;font-size:.95rem;color:var(--ink-soft)}
+
+/* ---- review ---- */
+#review{position:fixed;inset:0;z-index:50;background:var(--paper);overflow-y:auto;
+  padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 16px)}
+#review .inner{max-width:640px;margin:0 auto}
+.rtop{display:flex;align-items:center;gap:10px;font-size:.8rem;color:var(--mute)}
+.rtop .pos{color:var(--ink);font-size:.95rem}
+.rtop .crumb{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rtop button{color:var(--mute);font-size:.85rem;padding:4px 6px}
+.rprog{height:4px;background:#DCE3E7;border-radius:999px;overflow:hidden;margin:9px 0 16px}
+.rprog i{display:block;height:100%;background:var(--ink);transition:width .25s}
+.stage{background:#fff;border-radius:16px;padding:24px 20px;min-height:230px;margin-bottom:16px}
+.stage img{width:100%;border-radius:9px;margin-bottom:16px;display:block}
+.qtext{font-size:1.2rem;line-height:2}
+
+/* 墨块：签名交互 */
+.ink{background:var(--ink);color:transparent;border-radius:3px;padding:0 4px;
+  cursor:pointer;transition:background .18s,color .18s}
+.ink.open{background:var(--gold-bg);color:var(--gold);font-weight:600}
+.answer{margin-top:22px;padding-top:16px;border-top:1px dashed var(--line)}
+.answer p{margin:8px 0 0;font-size:1.1rem}
+.pts{margin-top:18px;padding-top:14px;border-top:1px dashed var(--line)}
+.pt{display:flex;gap:11px;align-items:flex-start;padding:9px 0}
+.pt .box{width:24px;height:24px;border:1.5px solid var(--line);border-radius:6px;
+  flex-shrink:0;text-align:center;line-height:22px;font-size:.85rem;color:transparent}
+.pt.on .box{background:var(--pine);border-color:var(--pine);color:#fff}
+.pt .t{font-size:.98rem;color:var(--mute);line-height:1.5}
+.pt.on .t{color:var(--ink)}
+.grades{display:flex;gap:8px}
+.grades button{flex:1;padding:13px 0;background:#fff;border:1.5px solid var(--line);
+  border-radius:12px;text-align:center}
+.grades .g-t{display:block;font-size:1rem;font-weight:600}
+.grades .g-s{display:block;font-size:.68rem;color:var(--mute);margin-top:2px}
+.grades button.g0{border-color:var(--ochre)} .grades button.g0 .g-t{color:var(--ochre)}
+.grades button.g2{border-color:var(--pine)} .grades button.g2 .g-t{color:var(--pine)}
+.errbox{background:#fff;border-radius:12px;padding:14px}
+.errbox .chip{padding:11px 20px;font-size:.95rem;background:var(--paper);border-radius:9px}
+.done{text-align:center;padding-top:70px}
+.done .n{font-size:4.6rem;line-height:1;display:block}
+
+/* ---- forms ---- */
+.field{margin-top:12px}
+.input,.ta,select.input{width:100%;padding:12px;background:var(--paper);border:none;
+  border-radius:9px;font-size:1rem;margin-top:7px;-webkit-appearance:none}
+.ta{min-height:110px;line-height:1.8;resize:vertical}
+.tool{display:inline-block;padding:9px 15px;margin:8px 8px 0 0;background:var(--paper);
+  border-radius:9px;font-size:.88rem;color:var(--ink-soft)}
+.tool.warn{color:var(--ochre)}
+.tip{display:block;font-size:.76rem;color:var(--mute);margin-top:7px;line-height:1.6}
+.types{display:flex;gap:8px;margin-top:9px}
+.types button{flex:1;padding:11px 7px;background:var(--paper);border-radius:11px;
+  border:1.5px solid transparent;text-align:left}
+.types button.on{background:#fff;border-color:var(--ink)}
+.types .tn{display:block;font-size:.88rem;font-weight:600}
+.types .td{display:block;font-size:.66rem;color:var(--mute);line-height:1.35;margin-top:2px}
+.ptrow{display:flex;gap:8px;align-items:center;margin-top:8px}
+.ptrow .i{width:20px;font-size:.8rem;color:var(--mute)}
+.ptrow input{flex:1;padding:10px;background:var(--paper);border:none;border-radius:8px;font-size:.95rem}
+.ptrow .x{padding:0 8px;color:var(--ochre);font-size:.85rem}
+#thumb{width:100%;border-radius:9px;margin-top:12px;display:block}
+
+/* ---- list ---- */
+#filters{display:flex;overflow-x:auto;gap:0;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+#filters::-webkit-scrollbar{display:none}
+#filters .chip{white-space:nowrap;background:#fff;flex-shrink:0}
+#filters .chip.on{background:var(--ink)}
+.item{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px}
+.item .top{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:.72rem;color:var(--mute)}
+.item .badge{padding:2px 8px;background:var(--paper);border-radius:5px;color:var(--ink-soft)}
+.item .top .sp{flex:1}
+.item .due.hot{color:var(--gold);font-weight:600}
+.item .tx{font-size:.98rem;line-height:1.55}
+.item .meta{margin-top:7px;font-size:.72rem;color:var(--mute)}
+.item .meta .lp{color:var(--ochre);margin-right:9px}
+.item .meta .et{background:var(--ink-soft);color:#fff;padding:1px 7px;border-radius:5px;margin-right:9px}
+
+/* ---- stats ---- */
+.grid{display:flex;flex-wrap:wrap;gap:12px}
+.cell{width:calc(50% - 6px);background:#fff;border-radius:12px;padding:16px}
+.cell .v{display:block;font-size:2rem;line-height:1.15}
+.cell .k{display:block;font-size:.74rem;color:var(--mute);margin-top:1px}
+
+/* ---- listen ---- */
+.lsn{text-align:center;padding:20px 0}
+.lsn .now{font-size:1.12rem;line-height:1.9;min-height:120px;
+  display:flex;align-items:center;justify-content:center;text-align:left}
+.lsn .play{width:88px;height:88px;border-radius:50%;background:var(--ink);color:#fff;
+  font-size:1.9rem;margin:16px auto;display:flex;align-items:center;justify-content:center}
+.lsn .play.on{background:var(--gold)}
+.lsn .ctl{display:flex;gap:10px;justify-content:center;margin-top:6px}
+.lsn .ctl button{padding:10px 20px;background:#fff;border-radius:9px;font-size:.9rem}
+.seg{display:flex;gap:0;background:var(--paper);border-radius:9px;padding:3px;margin-top:9px}
+.seg button{flex:1;padding:9px 0;border-radius:7px;font-size:.85rem;color:var(--mute)}
+.seg button.on{background:#fff;color:var(--ink);font-weight:600}
+
+.toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);z-index:90;
+  background:rgba(23,50,63,.94);color:#fff;padding:11px 20px;border-radius:11px;
+  font-size:.9rem;opacity:0;transition:opacity .22s;pointer-events:none;max-width:80%}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<nav id="tabs">
+  <button data-tab="today" class="on"><span class="ic">●</span>今日</button>
+  <button data-tab="listen"><span class="ic">♪</span>听背</button>
+  <button data-tab="add"><span class="ic">＋</span>录题</button>
+  <button data-tab="list"><span class="ic">≡</span>题库</button>
+  <button data-tab="stats"><span class="ic">▨</span>统计</button>
+</nav>
+
+<div id="review" class="hidden"><div class="inner"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+/* =======================================================================
+   1. 存储层 —— IndexedDB。题目文本一个表，图片 Blob 一个表。
+   ======================================================================= */
+const DB = (()=>{
+  let p;
+  function open(){
+    if(p) return p;
+    p = new Promise((res,rej)=>{
+      const r = indexedDB.open('beishu',1);
+      r.onupgradeneeded = e=>{
+        const db = e.target.result;
+        if(!db.objectStoreNames.contains('cards'))  db.createObjectStore('cards',{keyPath:'id'});
+        if(!db.objectStoreNames.contains('images')) db.createObjectStore('images');
+      };
+      r.onsuccess = ()=>res(r.result);
+      r.onerror   = ()=>rej(r.error);
+    });
+    return p;
+  }
+  async function tx(store,mode,fn){
+    const db = await open();
+    return new Promise((res,rej)=>{
+      const t = db.transaction(store,mode);
+      const s = t.objectStore(store);
+      let out;
+      try{ out = fn(s); }catch(e){ rej(e); return; }
+      t.oncomplete = ()=>res(out && out.result !== undefined ? out.result : out);
+      t.onerror = ()=>rej(t.error);
+    });
+  }
+  return {
+    allCards : ()=>tx('cards','readonly', s=>s.getAll()),
+    putCard  : c =>tx('cards','readwrite',s=>s.put(c)),
+    delCard  : id=>tx('cards','readwrite',s=>s.delete(id)),
+    putImage : (k,b)=>tx('images','readwrite',s=>s.put(b,k)),
+    getImage : k =>tx('images','readonly', s=>s.get(k)),
+    delImage : k =>tx('images','readwrite',s=>s.delete(k)),
+    imageKeys: ()=>tx('images','readonly', s=>s.getAllKeys())
+  };
+})();
+
+/* =======================================================================
+   2. 领域逻辑 —— 间隔重复、队列、挖空解析
+   ======================================================================= */
+const DAY = 864e5, MIN = 6e4;
+const SUBJECTS = ['中国古代史','中国近代史','中国现代史','世界古代史','世界近代史','世界现代史','教资科目一','教资科目二'];
+const ERRTYPES = ['不会','记混','看错题'];
+const TYPENAME = {cloze:'挖空', qa:'问答', points:'采分点'};
+
+function blankCard(){
+  return {id: Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+    type:'cloze', subject:SUBJECTS[0], tags:[], front:'', back:'', points:[],
+    image:'', created:Date.now(), due:Date.now(), interval:0, ease:2.5,
+    reps:0, lapses:0, errorType:null, history:[]};
+}
+
+// grade: 0 忘了 / 1 模糊 / 2 记得
+function schedule(card, g){
+  const now = Date.now(), c = Object.assign({}, card);
+  c.reps = c.reps||0; c.lapses = c.lapses||0; c.ease = c.ease||2.5; c.interval = c.interval||0;
+  if(g===0){
+    c.lapses++; c.ease = Math.max(1.3, c.ease-0.2);
+    c.reps = 0; c.interval = 0; c.due = now + 10*MIN;      // 当天再来一次
+  }else if(g===1){
+    c.ease = Math.max(1.3, c.ease-0.15);
+    c.interval = c.interval<1 ? 1 : Math.max(1, Math.round(c.interval*1.2));
+    c.reps++; c.due = now + c.interval*DAY;
+  }else{
+    c.ease = Math.min(3.0, c.ease+0.05);
+    c.interval = c.reps===0 ? 1 : c.reps===1 ? 3 : Math.round(c.interval*c.ease);
+    c.reps++; c.due = now + c.interval*DAY;
+  }
+  c.history = (c.history||[]).concat([{t:now,g:g}]).slice(-40);
+  c.lastReview = now;
+  return c;
+}
+
+function preview(card,g){
+  const ms = schedule(card,g).due - Date.now();
+  if(ms < 60*MIN) return Math.round(ms/MIN)+' 分钟';
+  if(ms < DAY)    return Math.round(ms/(60*MIN))+' 小时';
+  const d = Math.round(ms/DAY);
+  return d<30 ? d+' 天' : (d/30).toFixed(1)+' 个月';
+}
+
+const isDue = (c,at)=> (c.due||0) <= (at||Date.now());
+
+// 「记混」的题排最前，并按知识点聚在一起对比
+function buildQueue(cards){
+  const now = Date.now(), due = cards.filter(c=>isDue(c,now));
+  const key = c => (c.tags&&c.tags[0]) || c.subject || '';
+  const mix = due.filter(c=>c.errorType==='记混')
+                 .sort((a,b)=> key(a).localeCompare(key(b)) || (a.due-b.due));
+  const rest = due.filter(c=>c.errorType!=='记混').sort((a,b)=>(a.due||0)-(b.due||0));
+  return mix.concat(rest);
+}
+
+function parseCloze(text){
+  const segs=[], re=/【([^】]*)】/g; let last=0,m;
+  while((m=re.exec(text))!==null){
+    if(m.index>last) segs.push({t:text.slice(last,m.index),hide:false});
+    segs.push({t:m[1],hide:true,open:false});
+    last = re.lastIndex;
+  }
+  if(last<text.length) segs.push({t:text.slice(last),hide:false});
+  if(!segs.length) segs.push({t:text,hide:false});
+  return segs;
+}
+
+const plain   = t => (t||'').replace(/[【】]/g,'');
+const esc     = t => (t||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const summary = (c,n)=>{ const s = plain(c.front) || (c.image?'［图片题］':'（空）');
+                         return s.length>(n||34) ? s.slice(0,n||34)+'…' : s; };
+function dueText(c){
+  const ms = (c.due||0)-Date.now();
+  if(ms<=0) return '待复习';
+  const d = Math.round(ms/DAY);
+  return d<1 ? '今天稍后' : d===1 ? '明天' : d<30 ? d+' 天后' : (d/30).toFixed(1)+' 个月后';
+}
+
+/* =======================================================================
+   3. 全局状态
+   ======================================================================= */
+const S = {cards:[], tab:'today', draft:null, editing:false,
+           filter:'all', kw:'', imgURL:{}, fontSize:localStorage.getItem('bs_font')||'17'};
+const $   = s => document.querySelector(s);
+const app = ()=>document.getElementById('app');
+
+function toast(msg){
+  const el = $('#toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove('show'), 1800);
+}
+
+async function imgURLFor(key){
+  if(!key) return '';
+  if(S.imgURL[key]) return S.imgURL[key];
+  const blob = await DB.getImage(key);
+  if(!blob) return '';
+  return (S.imgURL[key] = URL.createObjectURL(blob));
+}
+
+async function saveCard(c){ await DB.putCard(c);
+  const i = S.cards.findIndex(x=>x.id===c.id);
+  if(i>=0) S.cards[i]=c; else S.cards.unshift(c); }
+
+async function removeCard(id){
+  const c = S.cards.find(x=>x.id===id);
+  if(c && c.image){ await DB.delImage(c.image); delete S.imgURL[c.image]; }
+  await DB.delCard(id);
+  S.cards = S.cards.filter(x=>x.id!==id);
+}
+
+/* =======================================================================
+   4. 各页面渲染
+   ======================================================================= */
+function render(){
+  document.documentElement.style.setProperty('--base', S.fontSize+'px');
+  document.querySelectorAll('#tabs button').forEach(b=>
+    b.classList.toggle('on', b.dataset.tab===S.tab));
+  ({today:vToday, listen:vListen, add:vAdd, list:vList, stats:vStats})[S.tab]();
+}
+
+/* ---------- 今日 ---------- */
+function vToday(){
+  const q = buildQueue(S.cards);
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  let done = 0;
+  S.cards.forEach(c=>(c.history||[]).forEach(h=>{ if(h.t>=dayStart) done++; }));
+
+  const map = {}; q.forEach(c=>map[c.subject]=(map[c.subject]||0)+1);
+  const keys = Object.keys(map).sort((a,b)=>map[b]-map[a]);
+  const max  = keys.length ? map[keys[0]] : 1;
+  const total = done + q.length;
+  const future = S.cards.filter(c=>(c.due||0)>Date.now()).sort((a,b)=>a.due-b.due);
+  const mixed = q.filter(c=>c.errorType==='记混').length;
+
+  let hint;
+  if(!S.cards.length)   hint = '题库还是空的，从「录题」开始。';
+  else if(!q.length)    hint = `题库共 ${S.cards.length} 题，今天不欠账。`;
+  else if(q.length>40)  hint = `共 ${S.cards.length} 题。队列有点长，做完前 20 题也算数。`;
+  else                  hint = `题库共 ${S.cards.length} 题。`;
+
+  app().innerHTML = `
+  <div class="hero">
+    <span class="eyebrow">${now.getMonth()+1} 月 ${now.getDate()} 日</span>
+    <div><span class="num big">${q.length}</span><span class="unit">题待复习</span></div>
+    <div class="muted">${hint}</div>
+  </div>
+  ${total ? `<div class="pbar"><i style="width:${Math.round(done/total*100)}%"></i></div>
+             <div class="muted" style="margin:0 4px 14px">今天已复习 ${done} 题</div>` : '<div style="height:14px"></div>'}
+  ${q.length
+    ? `<button class="btn" id="start">开始复习</button>`
+    : `<div class="card"><b>今天的队列清空了</b><div class="muted" style="margin-top:4px">
+         下一批 ${future.length?dueText(future[0]):'暂无'} 到期。要么现在录几道新题，要么就休息。</div></div>`}
+  ${keys.length ? `<div class="card" style="margin-top:14px"><span class="eyebrow">待复习分布</span>
+      ${keys.map(k=>`<div class="row"><span class="nm">${k}</span>
+        <span class="bar"><i style="width:${Math.round(map[k]/max*100)}%"></i></span>
+        <span class="n num">${map[k]}</span></div>`).join('')}</div>` : ''}
+  ${mixed ? `<div class="card"><span class="eyebrow">易混专项</span>
+      <div style="margin-top:5px;font-size:.92rem">队列里有 ${mixed} 道标记为「记混」的题，已按知识点排到一起，可以对着比。</div></div>`:''}
+  <div class="duo">
+    <button data-go="add">录一道题</button>
+    <button data-go="list">翻题库</button>
+  </div>`;
+
+  const s = $('#start'); if(s) s.onclick = ()=>startReview();
+  app().querySelectorAll('[data-go]').forEach(b=> b.onclick = ()=>{ S.tab=b.dataset.go; render(); });
+}
+
+/* ---------- 复习 ---------- */
+const R = {queue:[], i:0, card:null, segs:[], revealed:false, checked:[], sum:[0,0,0]};
+
+function startReview(){
+  R.queue = buildQueue(S.cards); R.i = 0; R.sum = [0,0,0];
+  if(!R.queue.length){ toast('没有到期的题'); return; }
+  $('#review').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  loadCard();
+}
+function closeReview(){
+  $('#review').classList.add('hidden');
+  document.body.style.overflow = '';
+  render();
+}
+
+function loadCard(){
+  if(R.i >= R.queue.length){ renderDone(); return; }
+  R.card = R.queue[R.i];
+  R.segs = R.card.type==='cloze' ? parseCloze(R.card.front) : [];
+  R.revealed = false;
+  R.checked = (R.card.points||[]).map(()=>false);
+  renderReview();
+}
+
+async function renderReview(){
+  const c = R.card, el = $('#review .inner');
+  const imgSrc = c.image ? await imgURLFor(c.image) : '';
+  let bodyHTML = '';
+
+  if(c.type==='cloze'){
+    bodyHTML = `<div class="qtext">` + R.segs.map((s,i)=>
+      s.hide ? `<span class="ink${s.open?' open':''}" data-seg="${i}">${esc(s.t)}</span>`
+             : esc(s.t)).join('') + `</div>`;
+  }else if(c.type==='qa'){
+    bodyHTML = `<div class="qtext">${esc(c.front)}</div>` + (R.revealed
+      ? `<div class="answer"><span class="eyebrow">答案</span><p>${esc(c.back)}</p></div>` : '');
+  }else{
+    bodyHTML = `<div class="qtext">${esc(c.front)}</div>` + (R.revealed
+      ? `<div class="pts"><span class="eyebrow">答对哪几点，就点亮哪几点</span>
+          ${c.points.map((p,i)=>`<div class="pt${R.checked[i]?' on':''}" data-pt="${i}">
+             <span class="box">✓</span><span class="t">${esc(p)}</span></div>`).join('')}
+          <div class="muted" style="margin-top:9px">命中 ${R.checked.filter(Boolean).length} / ${c.points.length}</div></div>`
+      : `<div class="muted" style="margin-top:14px">先自己在心里（或嘴上）答一遍，再对采分点。</div>`);
+  }
+
+  el.innerHTML = `
+    <div class="rtop">
+      <span class="pos num">${Math.min(R.i+1,R.queue.length)} / ${R.queue.length}</span>
+      <span class="crumb">${c.subject}${c.tags&&c.tags.length?' · '+c.tags.join(' · '):''}</span>
+      <button id="rSpeak">朗读</button>
+      <button id="rEdit">编辑</button>
+      <button id="rClose">收起</button>
+    </div>
+    <div class="rprog"><i style="width:${Math.round(R.i/R.queue.length*100)}%"></i></div>
+    <div class="stage">${imgSrc?`<img src="${imgSrc}" id="rImg">`:''}${bodyHTML}</div>
+    ${R.revealed ? `<div class="grades">
+        ${[['忘了',0],['模糊',1],['记得',2]].map(([t,g])=>
+          `<button class="g${g}" data-g="${g}"><span class="g-t">${t}</span>
+             <span class="g-s">${preview(c,g)}</span></button>`).join('')}
+      </div>`
+     : `<button class="btn" id="rReveal">${c.type==='cloze'?'全部揭开':'看答案'}</button>`}`;
+
+  el.querySelectorAll('[data-seg]').forEach(s=> s.onclick = ()=>{
+    const i = +s.dataset.seg; R.segs[i].open = !R.segs[i].open; renderReview(); });
+  el.querySelectorAll('[data-pt]').forEach(p=> p.onclick = ()=>{
+    const i = +p.dataset.pt; R.checked[i] = !R.checked[i]; renderReview(); });
+  el.querySelectorAll('[data-g]').forEach(b=> b.onclick = ()=>doGrade(+b.dataset.g));
+
+  const rv = $('#rReveal');
+  if(rv) rv.onclick = ()=>{ R.revealed = true; R.segs.forEach(s=>s.open=true); renderReview(); };
+  $('#rClose').onclick = closeReview;
+  $('#rEdit').onclick  = ()=>{ closeReview(); openEdit(c.id); };
+  $('#rSpeak').onclick = ()=>{ speakOne(c); };
+  const im = $('#rImg'); if(im) im.onclick = ()=>window.open(imgSrc,'_blank');
+}
+
+async function doGrade(g){
+  const c = R.card;
+  const up = schedule(c,g);
+  if(c.type==='points' && c.points.length) up.lastScore = R.checked.filter(Boolean).length+'/'+c.points.length;
+  if(g===2) up.errorType = null;
+  await saveCard(up);
+  R.sum[g]++;
+  if(g===0) R.queue.push(up);          // 当天队尾再来一次
+
+  if(g<2){ askError(up); }
+  else   { R.i++; loadCard(); }
+}
+
+function askError(card){
+  const el = $('#review .inner');
+  const box = document.createElement('div');
+  box.className = 'errbox'; box.style.marginTop = '10px';
+  box.innerHTML = `<span class="eyebrow">错在哪</span><div style="margin-top:8px">
+    ${ERRTYPES.map(t=>`<span class="chip" data-e="${t}">${t}</span>`).join('')}
+    <span class="chip" data-e="">不填</span></div>`;
+  el.querySelector('.grades').replaceWith(box);
+  box.querySelectorAll('[data-e]').forEach(ch=> ch.onclick = async ()=>{
+    if(ch.dataset.e){ card.errorType = ch.dataset.e; await saveCard(card); }
+    R.i++; loadCard();
+  });
+}
+
+function renderDone(){
+  $('#review .inner').innerHTML = `<div class="done">
+    <span class="eyebrow">这一轮</span>
+    <span class="n num">${R.queue.length}</span>
+    <div style="font-size:1.1rem;margin-bottom:8px">题过完了</div>
+    <div class="muted">记得 ${R.sum[2]} · 模糊 ${R.sum[1]} · 忘了 ${R.sum[0]}</div>
+    <div class="muted" style="margin-top:4px">标「忘了」的题今天还会再出现一次。</div>
+    <button class="btn" id="dBack" style="margin-top:34px">回到今日</button></div>`;
+  $('#dBack').onclick = closeReview;
+}
+
+/* =======================================================================
+   5. 听背 —— 系统语音合成，通勤用
+   ======================================================================= */
+const L = {queue:null, i:0, playing:false, gap:3, mode:'both', stop:false};
+
+function voiceFor(){
+  const vs = speechSynthesis.getVoices().filter(v=>/^zh/i.test(v.lang));
+  return vs.find(v=>/Ting|Tingting|婷婷|Chinese/i.test(v.name)) || vs[0] || null;
+}
+function speak(text){
+  return new Promise(res=>{
+    if(!text || !text.trim()) return res();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN'; u.rate = 0.95;
+    const v = voiceFor(); if(v) u.voice = v;
+    u.onend = res; u.onerror = res;
+    speechSynthesis.speak(u);
+  });
+}
+const wait = ms => new Promise(r=>setTimeout(r,ms));
+
+function frontSpeech(c){ return plain(c.front); }
+function backSpeech(c){
+  if(c.type==='qa') return c.back;
+  if(c.type==='points') return (c.points||[]).join('。');
+  const m = c.front.match(/【([^】]*)】/g);
+  return m ? '关键词：'+m.map(x=>x.replace(/[【】]/g,'')).join('、') : '';
+}
+function speakOne(c){
+  speechSynthesis.cancel();
+  speak(frontSpeech(c)).then(()=>wait(600)).then(()=>speak(backSpeech(c)));
+}
+
+function ensureListenQueue(){
+  if(L.queue) return;
+  const q = buildQueue(S.cards);
+  L.queue = q.length ? q : S.cards.slice().sort((a,b)=>(a.due||0)-(b.due||0));
+  L.i = 0;
+}
+
+function vListen(){
+  ensureListenQueue();
+  const c = L.queue[L.i];
+
+  app().innerHTML = `
+  <div class="hero" style="padding-bottom:0">
+    <span class="eyebrow">听背</span>
+    <div class="muted">读题 → 停 ${L.gap} 秒让你想 → 读答案 → 下一题。走路、坐车、做家务的时候用。</div>
+  </div>
+  ${!L.queue.length ? `<div class="card" style="margin-top:16px">题库是空的，先去录几道题。</div>` : `
+  <div class="card lsn">
+    <span class="eyebrow">${L.i+1} / ${L.queue.length} · ${c?c.subject:''}</span>
+    <div class="now" id="lNow">${c?esc(summary(c,60)):''}</div>
+    <button class="play${L.playing?' on':''}" id="lPlay">${L.playing?'❚❚':'▶'}</button>
+    <div class="ctl">
+      <button id="lPrev">上一题</button>
+      <button id="lMiss">这题没记住</button>
+      <button id="lNext">下一题</button>
+    </div>
+  </div>
+  <div class="card">
+    <span class="eyebrow">读什么</span>
+    <div class="seg">
+      <button data-m="both" class="${L.mode==='both'?'on':''}">题目 + 答案</button>
+      <button data-m="front" class="${L.mode==='front'?'on':''}">只读题目</button>
+    </div>
+    <span class="eyebrow" style="margin-top:14px">中间停多久</span>
+    <div class="seg">
+      ${[2,3,5,8].map(g=>`<button data-gap="${g}" class="${L.gap===g?'on':''}">${g} 秒</button>`).join('')}
+    </div>
+    <div class="tip">屏幕锁上后 iOS 会暂停朗读。想放兜里听，先把「设置 → 显示与亮度 → 自动锁定」调成「永不」。</div>
+  </div>`}`;
+
+  const pl = $('#lPlay'); if(!pl) return;
+  pl.onclick  = ()=> L.playing ? stopListen() : startListen();
+  $('#lPrev').onclick = ()=>{ jump(-1); };
+  $('#lNext').onclick = ()=>{ jump(1); };
+  $('#lMiss').onclick = async ()=>{
+    const cur = L.queue[L.i]; if(!cur) return;
+    await saveCard(schedule(cur,0));
+    toast('已丢回今天的队列');
+  };
+  app().querySelectorAll('[data-m]').forEach(b=> b.onclick = ()=>{ L.mode=b.dataset.m; vListen(); });
+  app().querySelectorAll('[data-gap]').forEach(b=> b.onclick = ()=>{ L.gap=+b.dataset.gap; vListen(); });
+}
+
+function jump(d){
+  stopListen();
+  L.i = Math.max(0, Math.min(L.queue.length-1, L.i+d));
+  vListen();
+}
+function stopListen(){ L.stop = true; L.playing = false; speechSynthesis.cancel(); vListen(); }
+
+async function startListen(){
+  L.stop = false; L.playing = true; vListen();
+  while(!L.stop && L.i < L.queue.length){
+    const c = L.queue[L.i];
+    const el = $('#lNow'); if(el) el.textContent = plain(c.front);
+    await speak(frontSpeech(c));
+    if(L.stop) break;
+    if(L.mode==='both'){
+      await wait(L.gap*1000);
+      if(L.stop) break;
+      const b = backSpeech(c);
+      if(b){ const e2 = $('#lNow'); if(e2) e2.textContent = b; await speak(b); }
+    }else{
+      await wait(L.gap*1000);
+    }
+    if(L.stop) break;
+    await wait(700);
+    L.i++;
+    if(L.i < L.queue.length) vListen();
+  }
+  if(!L.stop){ L.playing=false; L.i = Math.min(L.i, L.queue.length-1); vListen(); toast('听完了'); }
+}
+
+/* =======================================================================
+   6. 录题 / 编辑
+   ======================================================================= */
+const PH = {
+  cloze : '例：洋务运动前期口号是【自强】，后期是【求富】。',
+  qa    : '例：简述新文化运动的主要内容。',
+  points: '例：简述中学常用的教学原则。'
+};
+const TYPEDEF = [['cloze','挖空复述','盖住关键词，自己补'],
+                 ['qa','问答','看题目，说答案'],
+                 ['points','采分点','主观题逐条对勾']];
+
+function openEdit(id){
+  const c = S.cards.find(x=>x.id===id);
+  if(!c) return;
+  S.draft = JSON.parse(JSON.stringify(c));
+  S.editing = true; S.tab = 'add'; render();
+}
+
+async function vAdd(){
+  if(!S.draft){ S.draft = blankCard(); S.editing = false; }
+  const d = S.draft;
+  const imgSrc = d.image ? await imgURLFor(d.image) : '';
+
+  app().innerHTML = `
+  <div class="card">
+    <span class="eyebrow">怎么考自己</span>
+    <div class="types">${TYPEDEF.map(([k,n,ds])=>
+      `<button data-t="${k}" class="${d.type===k?'on':''}">
+        <span class="tn">${n}</span><span class="td">${ds}</span></button>`).join('')}</div>
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">归到哪里</span>
+    <select class="input" id="fSub">${SUBJECTS.map(s=>
+      `<option${s===d.subject?' selected':''}>${s}</option>`).join('')}</select>
+    <div class="field"><span class="eyebrow">知识点（空格隔开，如：洋务运动 民族工业）</span>
+      <input class="input" id="fTags" value="${esc((d.tags||[]).join(' '))}" placeholder="留空也行"></div>
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">${d.type==='points'?'题目':'正面'}</span>
+    <textarea class="ta" id="fFront" placeholder="${PH[d.type]}">${esc(d.front)}</textarea>
+    ${d.type==='cloze' ? `<button class="tool" id="bBrace">插入【】挖空</button>
+      <span class="tip">被【】包住的字会被墨块盖掉，复习时点一下才化开。</span>`:''}
+    ${imgSrc?`<img id="thumb" src="${imgSrc}">`:''}
+    <div><button class="tool" id="bImg">${d.image?'换张图':'加张截图'}</button>
+      ${d.image?`<button class="tool warn" id="bImgDel">去掉图</button>`:''}</div>
+    <input type="file" accept="image/*" id="fFile" style="display:none">
+  </div>
+
+  ${d.type==='qa' ? `<div class="card"><span class="eyebrow">答案</span>
+    <textarea class="ta" id="fBack" placeholder="背面要说出来的内容">${esc(d.back)}</textarea></div>`:''}
+
+  ${d.type==='points' ? `<div class="card">
+    <span class="eyebrow">采分点（一条一个，复习时逐条对勾）</span>
+    <div id="ptList">${(d.points||[]).map((p,i)=>
+      `<div class="ptrow"><span class="i num">${i+1}</span>
+        <input value="${esc(p)}" data-pi="${i}"><button class="x" data-px="${i}">删</button></div>`).join('')}</div>
+    <button class="tool" id="bAddPt">加一条采分点</button></div>`:''}
+
+  <button class="btn" id="bSave">${S.editing?'保存修改':'存进题库'}</button>
+  ${S.editing?`<button class="btn danger" id="bDel">删掉这道题</button>
+               <button class="btn ghost" id="bCancel">放弃修改</button>`:''}`;
+
+  const sync = ()=>{
+    d.front = $('#fFront').value;
+    d.subject = $('#fSub').value;
+    d.tags = $('#fTags').value.split(/[\s,，、]+/).filter(Boolean);
+    const b = $('#fBack'); if(b) d.back = b.value;
+    app().querySelectorAll('[data-pi]').forEach(inp=> d.points[+inp.dataset.pi] = inp.value);
+  };
+
+  app().querySelectorAll('[data-t]').forEach(b=> b.onclick = ()=>{
+    sync(); d.type = b.dataset.t;
+    if(d.type==='points' && !d.points.length) d.points = [''];
+    vAdd();
+  });
+
+  const br = $('#bBrace');
+  if(br) br.onclick = ()=>{
+    const ta = $('#fFront');
+    const p = ta.selectionStart, q = ta.selectionEnd, v = ta.value;
+    ta.value = v.slice(0,p) + '【' + v.slice(p,q) + '】' + v.slice(q);
+    d.front = ta.value;
+    ta.focus(); ta.setSelectionRange(q+1, q+1);
+  };
+
+  $('#bImg').onclick = ()=>$('#fFile').click();
+  $('#fFile').onchange = async e=>{
+    const f = e.target.files[0]; if(!f) return;
+    sync();
+    const blob = await compress(f);
+    const key = 'img_'+Date.now().toString(36);
+    await DB.putImage(key, blob);
+    if(d.image){ await DB.delImage(d.image); delete S.imgURL[d.image]; }
+    d.image = key; vAdd();
+  };
+  const bid = $('#bImgDel');
+  if(bid) bid.onclick = async ()=>{ sync(); await DB.delImage(d.image);
+    delete S.imgURL[d.image]; d.image=''; vAdd(); };
+
+  const ap = $('#bAddPt');
+  if(ap) ap.onclick = ()=>{ sync(); d.points.push(''); vAdd(); };
+  app().querySelectorAll('[data-px]').forEach(b=> b.onclick = ()=>{
+    sync(); d.points.splice(+b.dataset.px,1); vAdd(); });
+
+  $('#bSave').onclick = async ()=>{
+    sync();
+    if(d.type==='points') d.points = d.points.filter(p=>p&&p.trim());
+    if(!d.front.trim() && !d.image) return toast('题干还是空的');
+    if(d.type==='cloze'  && d.front.indexOf('【')<0) return toast('还没挖空，用【】包住关键词');
+    if(d.type==='qa'     && !d.back.trim())         return toast('答案还是空的');
+    if(d.type==='points' && !d.points.length)       return toast('至少写一条采分点');
+    await saveCard(d);
+    if(S.editing){ S.draft=null; S.editing=false; S.tab='list'; render(); toast('已保存'); }
+    else { S.draft = blankCard(); vAdd(); toast('存好了'); }
+  };
+
+  const bd = $('#bDel');
+  if(bd) bd.onclick = async ()=>{
+    if(!confirm('删掉这道题？删了就找不回来。')) return;
+    await removeCard(d.id);
+    S.draft=null; S.editing=false; S.tab='list'; render();
+  };
+  const bc = $('#bCancel');
+  if(bc) bc.onclick = ()=>{ S.draft=null; S.editing=false; S.tab='list'; render(); };
+}
+
+// 图片压缩：长边不超过 1400px，JPEG 质量 0.72
+function compress(file){
+  return new Promise(res=>{
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      const max = 1400;
+      let {width:w, height:h} = img;
+      if(Math.max(w,h) > max){ const r = max/Math.max(w,h); w = Math.round(w*r); h = Math.round(h*r); }
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      cv.toBlob(b=>res(b||file), 'image/jpeg', 0.72);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); res(file); };
+    img.src = url;
+  });
+}
+
+/* =======================================================================
+   7. 题库
+   ======================================================================= */
+function vList(){
+  app().innerHTML = `
+  <input class="input" id="fKw" style="margin:0 0 12px" placeholder="搜题干或知识点" value="${esc(S.kw)}">
+  <div id="filters">
+    <span class="chip ${S.filter==='all'?'on':''}" data-f="all">全部 ${S.cards.length}</span>
+    <span class="chip ${S.filter==='due'?'on':''}" data-f="due">待复习</span>
+    <span class="chip ${S.filter==='weak'?'on':''}" data-f="weak">老是错</span>
+    ${SUBJECTS.map(s=>`<span class="chip ${S.filter===s?'on':''}" data-f="${s}">${s}</span>`).join('')}
+  </div>
+  <div id="listBody"></div>`;
+
+  let timer;
+  $('#fKw').oninput = e=>{
+    S.kw = e.target.value;
+    clearTimeout(timer);
+    timer = setTimeout(renderListBody, 160);   // 不重绘输入框，拼音才不会断
+  };
+  app().querySelectorAll('[data-f]').forEach(c=> c.onclick = ()=>{
+    S.filter = c.dataset.f;
+    app().querySelectorAll('[data-f]').forEach(x=>x.classList.toggle('on', x.dataset.f===S.filter));
+    renderListBody();
+  });
+  renderListBody();
+}
+
+function renderListBody(){
+  const now = Date.now();
+  let l = S.cards;
+  if(S.filter==='due')       l = l.filter(c=>isDue(c,now));
+  else if(S.filter==='weak') l = l.filter(c=>(c.lapses||0)>=2);
+  else if(S.filter!=='all')  l = l.filter(c=>c.subject===S.filter);
+  if(S.kw){
+    const k = S.kw.trim();
+    l = l.filter(c=>(plain(c.front)+' '+(c.back||'')+' '+(c.tags||[]).join(' ')+' '+(c.points||[]).join(' ')).indexOf(k)>=0);
+  }
+  l = l.slice().sort((a,b)=>(a.due||0)-(b.due||0)).slice(0,400);
+
+  $('#listBody').innerHTML = `
+  ${l.length ? l.map(c=>`
+    <div class="item" data-id="${c.id}">
+      <div class="top"><span class="badge">${TYPENAME[c.type]}</span>
+        <span>${c.subject}</span><span class="sp"></span>
+        <span class="due ${isDue(c,now)?'hot':''}">${dueText(c)}</span></div>
+      <div class="tx">${esc(summary(c,44))}</div>
+      <div class="meta">${c.lapses?`<span class="lp">忘过 ${c.lapses} 次</span>`:''}
+        ${c.errorType?`<span class="et">${c.errorType}</span>`:''}
+        ${(c.tags||[]).map(t=>`<span style="margin-right:8px">${esc(t)}</span>`).join('')}</div>
+    </div>`).join('')
+   : `<div class="card muted" style="text-align:center;padding:50px 0">没有符合的题。</div>`}`;
+
+  $('#listBody').querySelectorAll('.item').forEach(it=> it.onclick = ()=>openEdit(it.dataset.id));
+}
+
+/* =======================================================================
+   8. 统计 / 备份 / 设置
+   ======================================================================= */
+async function vStats(){
+  const cards = S.cards;
+
+  const wmap = {};
+  cards.forEach(c=>{
+    if(!c.lapses) return;
+    ((c.tags&&c.tags.length)?c.tags:[c.subject]).forEach(k=> wmap[k]=(wmap[k]||0)+c.lapses);
+  });
+  const wk = Object.keys(wmap).sort((a,b)=>wmap[b]-wmap[a]).slice(0,8);
+  const wmax = wk.length ? wmap[wk[0]] : 1;
+
+  const emap = {};
+  cards.forEach(c=>{ if(c.errorType) emap[c.errorType]=(emap[c.errorType]||0)+1; });
+  const ek = Object.keys(emap).sort((a,b)=>emap[b]-emap[a]);
+  const emax = ek.length ? emap[ek[0]] : 1;
+
+  const seen = cards.filter(c=>c.history&&c.history.length);
+  const ret = seen.length ? Math.round(seen.filter(c=>c.history[c.history.length-1].g>0).length/seen.length*100) : null;
+
+  const days = {};
+  cards.forEach(c=>(c.history||[]).forEach(h=>{
+    const d=new Date(h.t); days[d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()]=1; }));
+  const kf = d=>d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
+  let streak = 0; const probe = new Date();
+  if(!days[kf(probe)]) probe.setDate(probe.getDate()-1);
+  while(days[kf(probe)]){ streak++; probe.setDate(probe.getDate()-1); }
+
+  let usage = '—';
+  try{
+    if(navigator.storage && navigator.storage.estimate){
+      const e = await navigator.storage.estimate();
+      usage = (e.usage/1048576).toFixed(1)+' MB';
+    }
+  }catch(e){}
+
+  app().innerHTML = `
+  <div class="grid">
+    <div class="cell"><span class="v num">${cards.length}</span><span class="k">题库总量</span></div>
+    <div class="cell"><span class="v num">${buildQueue(cards).length}</span><span class="k">今天待复习</span></div>
+    <div class="cell"><span class="v num">${ret===null?'—':ret+'%'}</span><span class="k">上次保持率</span></div>
+    <div class="cell"><span class="v num">${streak}</span><span class="k">连续天数</span></div>
+  </div>
+
+  ${wk.length?`<div class="card" style="margin-top:14px"><span class="eyebrow">最该回头看的知识点</span>
+    <div class="muted">按「忘了」的次数排</div>
+    ${wk.map(k=>`<div class="row"><span class="nm">${esc(k)}</span>
+      <span class="bar"><i style="width:${Math.round(wmap[k]/wmax*100)}%"></i></span>
+      <span class="n num">${wmap[k]}</span></div>`).join('')}</div>`:''}
+
+  ${ek.length?`<div class="card"><span class="eyebrow">错因分布</span>
+    ${ek.map(k=>`<div class="row"><span class="nm">${k}</span>
+      <span class="bar"><i class="o" style="width:${Math.round(emap[k]/emax*100)}%"></i></span>
+      <span class="n num">${emap[k]}</span></div>`).join('')}
+    <div class="muted" style="margin-top:10px">「记混」的题在复习队列里会被排到一起对比。</div></div>`:''}
+
+  <div class="card">
+    <span class="eyebrow">备份 · 已占用 ${usage}</span>
+    <div class="muted">建议每周导一次。导出的文件存到「文件」App 或发给自己。</div>
+    <button class="tool" id="bExp">导出（含图片）</button>
+    <button class="tool" id="bExpLite">导出（仅文字）</button>
+    <button class="tool" id="bImp">导入备份</button>
+    <input type="file" accept="application/json,.json" id="fImp" style="display:none">
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">字号</span>
+    <div class="seg">${[['15','小'],['17','中'],['19','大'],['21','特大']].map(([v,n])=>
+      `<button data-fs="${v}" class="${S.fontSize===v?'on':''}">${n}</button>`).join('')}</div>
+  </div>`;
+
+  $('#bExp').onclick     = ()=>doExport(true);
+  $('#bExpLite').onclick = ()=>doExport(false);
+  $('#bImp').onclick     = ()=>$('#fImp').click();
+  $('#fImp').onchange    = doImport;
+  app().querySelectorAll('[data-fs]').forEach(b=> b.onclick = ()=>{
+    S.fontSize = b.dataset.fs; localStorage.setItem('bs_font', S.fontSize); render(); });
+}
+
+const blobToDataURL = b => new Promise(r=>{ const f=new FileReader(); f.onload=()=>r(f.result); f.readAsDataURL(b); });
+
+async function doExport(withImages){
+  toast('正在打包…');
+  const out = {v:1, at:Date.now(), cards:S.cards, images:{}};
+  if(withImages){
+    for(const c of S.cards){
+      if(!c.image) continue;
+      const b = await DB.getImage(c.image);
+      if(b) out.images[c.image] = await blobToDataURL(b);
+    }
+  }else{
+    out.cards = S.cards.map(c=>Object.assign({},c,{image:''}));
+  }
+  const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
+  const d = new Date();
+  const name = `背书备份-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+async function doImport(e){
+  const f = e.target.files[0]; if(!f) return;
+  let data;
+  try{ data = JSON.parse(await f.text()); }catch(err){ return toast('文件读不出来'); }
+  if(!data || !data.cards || !data.cards.length) return toast('备份里没有题目');
+  if(!confirm(`导入 ${data.cards.length} 题？id 相同的会被覆盖，其余追加。`)) return;
+
+  for(const key in (data.images||{})){
+    const res = await fetch(data.images[key]);
+    await DB.putImage(key, await res.blob());
+  }
+  for(const raw of data.cards){
+    const merged = Object.assign(blankCard(), raw);
+    await DB.putCard(merged);
+  }
+  S.cards = await DB.allCards();
+  S.imgURL = {};
+  render();
+  toast('导入完成');
+}
+
+/* =======================================================================
+   9. 启动
+   ======================================================================= */
+document.querySelectorAll('#tabs button').forEach(b=> b.onclick = ()=>{
+  if(S.tab==='listen' && b.dataset.tab!=='listen') stopListen();
+  if(b.dataset.tab==='listen' && !L.playing){ L.queue = null; L.i = 0; }
+  if(b.dataset.tab==='add' && S.tab!=='add' && S.editing){ S.draft=null; S.editing=false; }
+  S.tab = b.dataset.tab; render();
+});
+
+async function boot(){
+  S.cards = await DB.allCards();
+  if(!S.cards.length && !localStorage.getItem('bs_seeded')){
+    const a = blankCard();
+    a.type='cloze'; a.subject='中国近代史'; a.tags=['洋务运动'];
+    a.front='洋务运动的口号，前期是【自强】，后期是【求富】；代表企业有江南制造总局、【福州船政局】。';
+    const b = blankCard();
+    b.type='points'; b.subject='教资科目二'; b.tags=['教学原则'];
+    b.front='简述中学常用的教学原则。';
+    b.points=['科学性与思想性统一','理论联系实际','直观性','启发性','循序渐进','巩固性','因材施教','量力性'];
+    await DB.putCard(a); await DB.putCard(b);
+    localStorage.setItem('bs_seeded','1');
+    S.cards = await DB.allCards();
+  }
+  if(speechSynthesis.getVoices().length===0) speechSynthesis.onvoiceschanged = ()=>{};
+  render();
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+boot();
+</script>
+</body>
+</html>
