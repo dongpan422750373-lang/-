@@ -164,6 +164,36 @@ input,textarea,select{font:inherit;color:inherit}
 .seg button{flex:1;padding:9px 0;border-radius:7px;font-size:.85rem;color:var(--mute)}
 .seg button.on{background:#fff;color:var(--ink);font-weight:600}
 
+
+/* ---- AI 自动录入 ---- */
+#aiPane{position:fixed;inset:0;z-index:60;background:var(--paper);overflow-y:auto;
+  padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 20px)}
+#aiPane .inner{max-width:640px;margin:0 auto}
+.aihead{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.aihead .t{flex:1;font-size:1.05rem;font-weight:600}
+.aihead button{color:var(--mute);font-size:.9rem;padding:4px 6px}
+.aibig{display:block;width:100%;padding:15px;border-radius:12px;background:var(--gold-bg);
+  color:#8a5f0c;font-weight:600;text-align:center;font-size:1rem;margin-bottom:10px}
+.aibig.off{background:var(--paper);color:var(--mute);font-weight:400}
+.warn{background:#FBF1DC;border-left:3px solid var(--gold);padding:9px 12px;
+  border-radius:0 8px 8px 0;font-size:.82rem;line-height:1.6;margin-top:9px;color:#7a5406}
+.res{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px}
+.res img{width:100%;border-radius:9px;margin-bottom:12px;display:block}
+.res .lbl{font-size:.72rem;letter-spacing:.12em;color:var(--mute);display:block;margin-top:12px}
+.res .fld{width:100%;padding:10px;background:var(--paper);border:none;border-radius:8px;
+  font-size:.95rem;margin-top:5px;line-height:1.7}
+.res textarea.fld{min-height:80px;resize:vertical}
+.res .acts{display:flex;gap:9px;margin-top:14px}
+.res .acts button{flex:1;padding:13px 0;border-radius:10px;font-size:.95rem;font-weight:600}
+.res .keep{background:var(--ink);color:#fff}
+.res .drop{background:transparent;color:var(--ochre);border:1.5px solid #E5CFC9}
+.res .two{display:flex;gap:14px;margin-top:12px;font-size:.85rem}
+.res .two label{display:flex;align-items:center;gap:6px;color:var(--ink-soft)}
+.prog{height:6px;background:#DCE3E7;border-radius:999px;overflow:hidden;margin:12px 0}
+.prog i{display:block;height:100%;background:var(--gold);transition:width .3s}
+.unver{display:inline-block;background:var(--gold-bg);color:#8a5f0c;font-size:.66rem;
+  padding:2px 8px;border-radius:5px;margin-left:6px;vertical-align:middle}
+
 .toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);z-index:90;
   background:rgba(23,50,63,.94);color:#fff;padding:11px 20px;border-radius:11px;
   font-size:.9rem;opacity:0;transition:opacity .22s;pointer-events:none;max-width:80%}
@@ -183,6 +213,7 @@ input,textarea,select{font:inherit;color:inherit}
 </nav>
 
 <div id="review" class="hidden"><div class="inner"></div></div>
+<div id="aiPane" class="hidden"><div class="inner"></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -447,7 +478,7 @@ async function renderReview(){
   el.innerHTML = `
     <div class="rtop">
       <span class="pos num">${Math.min(R.i+1,R.queue.length)} / ${R.queue.length}</span>
-      <span class="crumb">${c.subject}${c.tags&&c.tags.length?' · '+c.tags.join(' · '):''}</span>
+      <span class="crumb">${c.subject}${c.tags&&c.tags.length?' · '+c.tags.join(' · '):''}${c.aiUnverified?'<span class="unver">未核对</span>':''}</span>
       <button id="rSpeak">朗读</button>
       <button id="rEdit">编辑</button>
       <button id="rClose">收起</button>
@@ -654,6 +685,8 @@ async function vAdd(){
   const imgSrc = d.image ? await imgURLFor(d.image) : '';
 
   app().innerHTML = `
+  <button class="aibig${AIcfg.ok()?'':' off'}" id="goAI">
+    ${AIcfg.ok() ? '📷 拍照自动录入' : '📷 拍照自动录入（未设置）'}</button>
   <div class="card">
     <span class="eyebrow">怎么考自己</span>
     <div class="types">${TYPEDEF.map(([k,n,ds])=>
@@ -702,6 +735,8 @@ async function vAdd(){
     app().querySelectorAll('[data-pi]').forEach(inp=> d.points[+inp.dataset.pi] = inp.value);
   };
 
+  $('#goAI').onclick = ()=>openAI();
+
   app().querySelectorAll('[data-t]').forEach(b=> b.onclick = ()=>{
     sync(); d.type = b.dataset.t;
     if(d.type==='points' && !d.points.length) d.points = [''];
@@ -743,6 +778,7 @@ async function vAdd(){
     if(d.type==='cloze'  && d.front.indexOf('【')<0) return toast('还没挖空，用【】包住关键词');
     if(d.type==='qa'     && !d.back.trim())         return toast('答案还是空的');
     if(d.type==='points' && !d.points.length)       return toast('至少写一条采分点');
+    if(S.editing) delete d.aiUnverified;   // 你亲手改过 = 已核对
     await saveCard(d);
     if(S.editing){ S.draft=null; S.editing=false; S.tab='list'; render(); toast('已保存'); }
     else { S.draft = blankCard(); vAdd(); toast('存好了'); }
@@ -823,7 +859,7 @@ function renderListBody(){
       <div class="top"><span class="badge">${TYPENAME[c.type]}</span>
         <span>${c.subject}</span><span class="sp"></span>
         <span class="due ${isDue(c,now)?'hot':''}">${dueText(c)}</span></div>
-      <div class="tx">${esc(summary(c,44))}</div>
+      <div class="tx">${esc(summary(c,44))}${c.aiUnverified?'<span class="unver">未核对</span>':''}</div>
       <div class="meta">${c.lapses?`<span class="lp">忘过 ${c.lapses} 次</span>`:''}
         ${c.errorType?`<span class="et">${c.errorType}</span>`:''}
         ${(c.tags||[]).map(t=>`<span style="margin-right:8px">${esc(t)}</span>`).join('')}</div>
@@ -900,6 +936,8 @@ async function vStats(){
     <input type="file" accept="application/json,.json" id="fImp" style="display:none">
   </div>
 
+  ${aiSettingsHTML()}
+
   <div class="card">
     <span class="eyebrow">字号</span>
     <div class="seg">${[['15','小'],['17','中'],['19','大'],['21','特大']].map(([v,n])=>
@@ -912,6 +950,7 @@ async function vStats(){
   $('#fImp').onchange    = doImport;
   app().querySelectorAll('[data-fs]').forEach(b=> b.onclick = ()=>{
     S.fontSize = b.dataset.fs; localStorage.setItem('bs_font', S.fontSize); render(); });
+  bindAISettings();
 }
 
 const blobToDataURL = b => new Promise(r=>{ const f=new FileReader(); f.onload=()=>r(f.result); f.readAsDataURL(b); });
@@ -956,6 +995,258 @@ async function doImport(e){
   S.imgURL = {};
   render();
   toast('导入完成');
+}
+
+
+/* =======================================================================
+   8.5 自动录题 —— 上传截图，模型识别 + 归类 + 挖空建议，你确认后入库
+   ======================================================================= */
+const AI_PRESETS = {
+  zhipu : {n:'智谱 GLM（有免费档）', base:'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+           model:'glm-4v-flash'},
+  qwen  : {n:'通义千问 VL',         base:'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+           model:'qwen-vl-plus'},
+  custom: {n:'自定义 / 中转地址',    base:'', model:''}
+};
+
+const AIcfg = {
+  get(){ try{ return JSON.parse(localStorage.getItem('bs_ai')||'{}'); }catch(e){ return {}; } },
+  set(c){ localStorage.setItem('bs_ai', JSON.stringify(c)); },
+  ok(){ const c=this.get(); return !!(c.key && c.base && c.model); }
+};
+
+const AI_PROMPT = `你是备考助手。图片是一道考题的截图。请严格完成：
+1. 逐字识别题干和全部选项，原样保留，不要改写、缩写或补充。
+2. 归类，只能从这个列表选一个：中国古代史/中国近代史/中国现代史/世界古代史/世界近代史/世界现代史/教资科目一/教资科目二
+3. 提炼 1 至 3 个知识点标签，用具体概念名，不要用"历史""选择题"这种空词。
+4. 关于答案：如果截图里本身给出了答案或解析，抄录它，answerVerified 填 true；如果截图里没有答案，你可以给出判断和理由，但 answerVerified 必须填 false。绝不能把自己的推断说成是原文给的。
+5. 再提炼一条"必背表述"放进 cloze，把真正需要精确记忆的词（时间、人名、术语、概念本质）用【】包起来。不要挖无关紧要的字，挖 2 到 4 处为宜。
+
+只输出 JSON，不要 markdown 代码块，不要任何解释：
+{"subject":"","tags":[],"front":"","back":"","answerVerified":false,"cloze":""}`;
+
+function pickJSON(txt){
+  let t = (txt||'').trim().replace(/^```(json)?/i,'').replace(/```$/,'').trim();
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if(a<0 || b<a) throw new Error('模型没返回 JSON');
+  return JSON.parse(t.slice(a,b+1));
+}
+
+async function aiAnalyze(blob){
+  const c = AIcfg.get();
+  const dataUrl = await blobToDataURL(blob);
+  const body = {
+    model: c.model, temperature: 0.2,
+    messages: [{role:'user', content:[
+      {type:'image_url', image_url:{url:dataUrl}},
+      {type:'text', text:AI_PROMPT}
+    ]}]
+  };
+  let r;
+  try{
+    r = await fetch(c.base, {method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
+      body: JSON.stringify(body)});
+  }catch(e){
+    throw new Error('连不上。多半是浏览器跨域被拦了 —— 看说明书第八节，挂一个中转地址就好。');
+  }
+  if(!r.ok){
+    const t = await r.text();
+    throw new Error('接口报错 '+r.status+'：'+t.slice(0,140));
+  }
+  const j = await r.json();
+  const msg = j.choices && j.choices[0] && j.choices[0].message;
+  let txt = msg ? msg.content : '';
+  if(Array.isArray(txt)) txt = txt.map(x=>x.text||'').join('');
+  return pickJSON(txt);
+}
+
+const AIP = {items:[]};
+
+function openAI(){
+  $('#aiPane').classList.remove('hidden');
+  document.body.style.overflow='hidden';
+  renderAI();
+}
+function closeAI(){
+  $('#aiPane').classList.add('hidden');
+  document.body.style.overflow='';
+  AIP.items = [];
+  render();
+}
+
+function renderAI(busy){
+  const el = $('#aiPane .inner');
+  const ready = AIcfg.ok();
+  el.innerHTML = `
+    <div class="aihead"><span class="t">自动录题</span>
+      <button id="aiClose">关闭</button></div>
+    ${ready
+      ? `<button class="aibig" id="aiPick">选截图（可以一次选好几张）</button>`
+      : `<button class="aibig off" id="aiSetup">还没配好识别服务 · 点这里去设置</button>`}
+    <input type="file" accept="image/*" multiple id="aiFile" style="display:none">
+    ${busy ? `<div class="prog"><i style="width:${busy.pct}%"></i></div>
+              <div class="muted">${busy.msg}</div>` : ''}
+    ${AIP.items.map((it,i)=> resHTML(it,i)).join('')}
+    ${(!AIP.items.length && !busy && ready)
+      ? `<div class="warn">识别出来的东西一律要你过一眼再存。模型会认错字，也可能答错题——
+         截图里没写答案的，它给的答案会标成「未核对」。</div>` : ''}`;
+
+  $('#aiClose').onclick = closeAI;
+  const pk = $('#aiPick');
+  if(pk) pk.onclick = ()=>$('#aiFile').click();
+  const st = $('#aiSetup');
+  if(st) st.onclick = ()=>{ closeAI(); S.tab='stats'; render();
+                            setTimeout(()=>{ const e=$('#aiBox'); if(e) e.scrollIntoView({behavior:'smooth'}); },250); };
+  const f = $('#aiFile');
+  if(f) f.onchange = e=>runAI(Array.from(e.target.files));
+
+  AIP.items.forEach((it,i)=>bindRes(it,i));
+}
+
+function resHTML(it,i){
+  if(it.err) return `<div class="res"><div class="muted">第 ${i+1} 张没认出来</div>
+    <div class="warn">${esc(it.err)}</div>
+    <div class="acts"><button class="drop" data-drop="${i}">移掉</button></div></div>`;
+  const d = it.data;
+  return `<div class="res" data-res="${i}">
+    ${it.url?`<img src="${it.url}">`:''}
+    <span class="lbl">科目</span>
+    <select class="fld" data-f="subject">${SUBJECTS.map(x=>
+      `<option${x===d.subject?' selected':''}>${x}</option>`).join('')}</select>
+    <span class="lbl">知识点</span>
+    <input class="fld" data-f="tags" value="${esc((d.tags||[]).join(' '))}">
+    <span class="lbl">题干</span>
+    <textarea class="fld" data-f="front">${esc(d.front)}</textarea>
+    <span class="lbl">答案${d.answerVerified?'':'<span class="unver">AI 推断 · 未核对</span>'}</span>
+    <textarea class="fld" data-f="back">${esc(d.back)}</textarea>
+    ${d.answerVerified?'':'<div class="warn">截图里没写答案，这是模型自己判断的。核对过再存，别直接背。</div>'}
+    <span class="lbl">必背表述（【】里的字会被墨块盖住）</span>
+    <textarea class="fld" data-f="cloze">${esc(d.cloze||'')}</textarea>
+    <div class="two">
+      <label><input type="checkbox" data-k="qa" ${it.mkQA!==false?'checked':''}>存原题卡</label>
+      <label><input type="checkbox" data-k="cl" ${it.mkCL!==false?'checked':''}>存挖空卡</label>
+    </div>
+    <div class="acts">
+      <button class="keep" data-keep="${i}">存入题库</button>
+      <button class="drop" data-drop="${i}">丢弃</button>
+    </div></div>`;
+}
+
+function bindRes(it,i){
+  const box = $(`[data-res="${i}"]`);
+  if(box){
+    box.querySelectorAll('[data-f]').forEach(f=> f.onchange = ()=>{
+      const k = f.dataset.f;
+      it.data[k] = k==='tags' ? f.value.split(/[\s,，、]+/).filter(Boolean) : f.value;
+    });
+    box.querySelectorAll('[data-k]').forEach(c=> c.onchange = ()=>{
+      if(c.dataset.k==='qa') it.mkQA = c.checked; else it.mkCL = c.checked; });
+  }
+  const kp = $(`[data-keep="${i}"]`); if(kp) kp.onclick = ()=>keepRes(i);
+  const dp = $(`[data-drop="${i}"]`); if(dp) dp.onclick = ()=>{
+    if(AIP.items[i] && AIP.items[i].imgKey) DB.delImage(AIP.items[i].imgKey);
+    AIP.items.splice(i,1); renderAI(); };
+}
+
+async function keepRes(i){
+  const it = AIP.items[i];
+  const d = it.data;
+  const tags = Array.isArray(d.tags) ? d.tags : String(d.tags||'').split(/\s+/).filter(Boolean);
+  let n = 0;
+
+  if(it.mkQA !== false && (d.front||'').trim()){
+    const c = blankCard();
+    c.type='qa'; c.subject=d.subject||SUBJECTS[0]; c.tags=tags;
+    c.front=d.front; c.back=d.back||''; c.image=it.imgKey||'';
+    if(!d.answerVerified) c.aiUnverified = true;
+    await saveCard(c); n++;
+    it.imgKey = null;                       // 图已交给这张卡，别在丢弃时删掉
+  }
+  if(it.mkCL !== false && (d.cloze||'').indexOf('【')>=0){
+    const c = blankCard();
+    c.type='cloze'; c.subject=d.subject||SUBJECTS[0]; c.tags=tags; c.front=d.cloze;
+    await saveCard(c); n++;
+  }
+  if(!n){ toast('两张都没勾，或者内容是空的'); return; }
+  AIP.items.splice(i,1);
+  renderAI();
+  toast('存了 '+n+' 张卡');
+}
+
+async function runAI(files){
+  if(!files.length) return;
+  for(let i=0;i<files.length;i++){
+    renderAI({pct: Math.round(i/files.length*100), msg:`正在认第 ${i+1} 张，共 ${files.length} 张…`});
+    let blob, key='', url='';
+    try{
+      blob = await compress(files[i]);
+      key  = 'img_'+Date.now().toString(36)+i;
+      await DB.putImage(key, blob);
+      url  = URL.createObjectURL(blob);
+      const data = await aiAnalyze(blob);
+      AIP.items.push({data:data, imgKey:key, url:url, mkQA:true, mkCL:true});
+    }catch(e){
+      if(key) await DB.delImage(key);
+      AIP.items.push({err: e.message || String(e)});
+    }
+  }
+  renderAI();
+}
+
+/* ---- 设置面板（挂在统计页）---- */
+function aiSettingsHTML(){
+  const c = AIcfg.get();
+  const p = c.preset || 'zhipu';
+  return `<div class="card" id="aiBox">
+    <span class="eyebrow">自动录题 · 识别服务</span>
+    <div class="muted">配好之后，录题页会多一个「拍照自动录入」。不配也不影响手动录题。</div>
+    <span class="eyebrow" style="margin-top:12px">服务商</span>
+    <div class="seg">${Object.keys(AI_PRESETS).map(k=>
+      `<button data-ap="${k}" class="${p===k?'on':''}">${AI_PRESETS[k].n.split(' ')[0]}</button>`).join('')}</div>
+    <div class="field"><span class="eyebrow">接口地址</span>
+      <input class="input" id="aiBase" value="${esc(c.base||AI_PRESETS[p].base)}"></div>
+    <div class="field"><span class="eyebrow">模型名</span>
+      <input class="input" id="aiModel" value="${esc(c.model||AI_PRESETS[p].model)}"></div>
+    <div class="field"><span class="eyebrow">API Key</span>
+      <input class="input" id="aiKey" type="password" value="${esc(c.key||'')}" placeholder="粘贴进来"></div>
+    <button class="tool" id="aiSave">保存</button>
+    <button class="tool" id="aiTest">测试连接</button>
+    <span class="tip">Key 只存在你自己手机里，不会发到别处。免费型号会变，报错说模型不存在的话，去服务商的模型列表页抄一个当前可用的名字填进「模型名」。</span>
+  </div>`;
+}
+
+function bindAISettings(){
+  const box = $('#aiBox'); if(!box) return;
+  box.querySelectorAll('[data-ap]').forEach(b=> b.onclick = ()=>{
+    const k = b.dataset.ap, c = AIcfg.get();
+    c.preset = k; c.base = AI_PRESETS[k].base; c.model = AI_PRESETS[k].model;
+    AIcfg.set(c); vStats();
+  });
+  $('#aiSave').onclick = ()=>{
+    const c = AIcfg.get();
+    c.base = $('#aiBase').value.trim();
+    c.model = $('#aiModel').value.trim();
+    c.key = $('#aiKey').value.trim();
+    AIcfg.set(c); toast('已保存');
+  };
+  $('#aiTest').onclick = async ()=>{
+    $('#aiSave').click();
+    if(!AIcfg.ok()) return toast('三项都要填');
+    toast('正在试…');
+    // 拿一张 1x1 的白图去探路
+    const cv = document.createElement('canvas'); cv.width=cv.height=8;
+    const cx = cv.getContext('2d'); cx.fillStyle='#fff'; cx.fillRect(0,0,8,8);
+    cv.toBlob(async b=>{
+      try{ await aiAnalyze(b); toast('通了，可以用了'); }
+      catch(e){
+        const m = e.message||'';
+        if(/跨域|连不上/.test(m)) alert('连不上。\n\n最可能是浏览器跨域被拦了，说明书第八节有解决办法（挂一个免费中转，五分钟）。\n\n原始信息：'+m);
+        else if(/JSON/.test(m)) toast('接口通了，返回格式待确认，可以直接试着录一张');
+        else alert('接口返回：\n\n'+m);
+      }
+    }, 'image/jpeg', 0.8);
+  };
 }
 
 /* =======================================================================

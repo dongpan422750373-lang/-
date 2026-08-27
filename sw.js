@@ -1,5 +1,5 @@
 // 改动 index.html 后，把版本号 +1，手机上刷新一次就会更新
-const V = 'beishu-v1';
+const V = 'beishu-v2';
 const FILES = ['./', './index.html', './manifest.json',
                './icon-180.png', './icon-192.png', './icon-512.png'];
 
