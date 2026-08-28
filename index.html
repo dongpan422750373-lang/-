@@ -333,14 +333,18 @@ const TYPENAME = {cloze:'挖空', qa:'问答', points:'采分点'};
 
 /* ---- 归类：科目（大类）+ 考点（子项，存在 tags[0]）---- */
 const topicOf = c => (((c&&c.tags)||[])[0]||'').trim();
+const locTime = c => Number((c&&c.locationAt)||(c&&c.created)||0);
 
-// 内置那几个科目，加上题库里自己写过的
+// 内置科目 + 自己写过的科目；最近用过的排在前面
 function allSubjects(){
-  const out = [], seen = {};
-  SUBJECTS.forEach(s=>{ seen[s]=1; out.push(s); });
+  const used = {}, builtIn = {};
+  SUBJECTS.forEach((s,i)=>{ used[s]=0; builtIn[s]=i; });
   S.cards.forEach(c=>{ const s=(c.subject||'').trim();
-    if(s && !seen[s]){ seen[s]=1; out.push(s); } });
-  return out;
+    if(s) used[s] = Math.max(used[s]||0, locTime(c)); });
+  const last = LAST.raw();
+  if(last.sub) used[last.sub] = Math.max(used[last.sub]||0, Number(last.at||0));
+  return Object.keys(used).sort((a,b)=>(used[b]-used[a]) ||
+    ((builtIn[a]??999)-(builtIn[b]??999)) || a.localeCompare(b,'zh-CN'));
 }
 // 某个科目下用过的考点，最近录入的排前面；不传科目就是全部
 function allTopics(sub){
@@ -348,16 +352,47 @@ function allTopics(sub){
   S.cards.forEach(c=>{
     if(sub && (c.subject||'').trim()!==sub) return;
     const t = topicOf(c);
-    if(t) m[t] = Math.max(m[t]||0, c.created||0);
+    if(t) m[t] = Math.max(m[t]||0, locTime(c));
   });
+  const last = LAST.raw();
+  if(last.topic && (!sub || last.sub===sub)) m[last.topic] = Math.max(m[last.topic]||0, Number(last.at||0));
   return Object.keys(m).sort((a,b)=>m[b]-m[a]);
 }
+
+// 题库里最近录入的归类：本地记忆丢了、或刚导入备份时也能自动找回
+function newestCardLocation(){
+  const c = S.cards.slice().sort((a,b)=>locTime(b)-locTime(a))[0];
+  if(!c || !(c.subject||'').trim()) return null;
+  return {sub:(c.subject||'').trim(), topic:topicOf(c), at:locTime(c)};
+}
+
 // 上一次录题归到哪儿，下一道题默认接着用
 const LAST = {
-  get(){ try{ return JSON.parse(localStorage.getItem('bs_last')||'{}'); }catch(e){ return {}; } },
+  raw(){ try{ return JSON.parse(localStorage.getItem('bs_last')||'{}'); }catch(e){ return {}; } },
+  get(){
+    const saved = this.raw(), fromCards = newestCardLocation();
+    if(!saved.sub) return fromCards || {};
+    if(fromCards && fromCards.at > Number(saved.at||0)) return fromCards;
+    return saved;
+  },
   set(sub,topic){ localStorage.setItem('bs_last',
-    JSON.stringify({sub:(sub||'').trim(), topic:(topic||'').trim()})); }
+    JSON.stringify({sub:(sub||'').trim(), topic:(topic||'').trim(), at:Date.now()})); }
 };
+
+// 最近几组「科目 · 子项」，录题页一点就能整组填入
+function recentLocations(limit){
+  const out = [], seen = {};
+  const add = x=>{
+    if(!x || !x.sub) return;
+    const key = x.sub+'\u0000'+(x.topic||'');
+    if(seen[key]) return;
+    seen[key]=1; out.push({sub:x.sub, topic:x.topic||'', at:Number(x.at||0)});
+  };
+  add(LAST.get());
+  S.cards.slice().sort((a,b)=>locTime(b)-locTime(a)).forEach(c=>
+    add({sub:(c.subject||'').trim(), topic:topicOf(c), at:locTime(c)}));
+  return out.slice(0, limit||8);
+}
 
 /* ---- 采分点：一条可以是字符串（老数据），也可以是 {t:'主点', subs:['小点']} ---- */
 function ptObj(p){
@@ -1164,6 +1199,16 @@ function topicChipHTML(sub, cur){
   return ts.map(t=>
     `<span class="chip${t===(cur||'').trim()?' on':''}" data-topic-v="${esc(t)}">${esc(t)}</span>`).join('');
 }
+function recentLocHTML(curSub, curTopic){
+  const rows = recentLocations(8);
+  if(!rows.length) return `<span class="muted" style="font-size:.8rem;padding-top:3px">
+    存下第一道题后，这里会显示最近用过的归类。</span>`;
+  return rows.map(x=>{
+    const on = x.sub===(curSub||'').trim() && x.topic===(curTopic||'').trim();
+    return `<button class="chip${on?' on':''}" data-loc-sub="${esc(x.sub)}"
+      data-loc-topic="${esc(x.topic)}">${esc(x.sub)}${x.topic?' · '+esc(x.topic):''}</button>`;
+  }).join('');
+}
 
 function openEdit(id){
   const c = S.cards.find(x=>x.id===id);
@@ -1191,12 +1236,16 @@ async function vAdd(){
 
   <div class="card">
     <span class="eyebrow">归到哪里</span>
+    <span class="eyebrow" style="margin-top:12px">最近归类（点一下整组填入）</span>
+    <div class="chiprow" id="recentLocs">${recentLocHTML(d.subject, topicOf(d))}</div>
+    <span class="eyebrow" style="margin-top:16px">科目 · 大类（可输入、可修改）</span>
     <input class="input" id="fSub" value="${esc(d.subject||'')}" placeholder="科目，比如 中国近代史">
     <div class="chiprow" id="subChips">${subChipHTML(d.subject)}</div>
-    <span class="eyebrow" style="margin-top:16px">考点 · 子项（可留空）</span>
+    <span class="eyebrow" style="margin-top:16px">考点 · 子项（可输入、可修改、可留空）</span>
     <input class="input" id="fTopic" value="${esc(topicOf(d))}" placeholder="比如 洋务运动、教学原则">
     <div class="chiprow" id="topicChips">${topicChipHTML(d.subject, topicOf(d))}</div>
-    <span class="tip">默认接着上一道题的归类，改一下就行。写了考点之后，题库能按考点单独筛，
+    <span class="tip">新录题会自动填入最近一道的归类；刚导入备份也能从题库恢复。
+      两个输入框都能直接改。写了考点之后，题库能按考点单独筛，
       统计里的「最该回头看的」也会精确到考点，而不是笼统一个科目。</span>
   </div>
 
@@ -1225,11 +1274,11 @@ async function vAdd(){
           `<div class="ptrow sub"><span class="i">·</span>
             <input value="${esc(s)}" data-pi="${i}" data-sj="${j}" placeholder="小点">
             <button class="x" data-px="${i}" data-sx="${j}">删</button></div>`).join('')}
-        <button class="tool mini" data-addsub="${i}">＋ 给第 ${i+1} 条加个小点</button>
+        <button class="tool mini" data-addsub="${i}">＋ 给第 ${i+1} 条添加子项</button>
       </div>`).join('')}</div>
     <button class="tool" id="bAddPt">加一条采分点</button>
-    <span class="tip">一条采分点底下还能再拆成并列的小点。复习时小点缩在主点下面，
-      可以单独打勾，主点旁边会显示这条命中了几个小点。</span></div>`:''}
+    <span class="tip">每条采分点都可以录入多个子项，子项输入框内按回车可继续加一个。
+      复习时子项缩在主点下面，可以单独打勾，主点旁边会显示命中了几个子项。</span></div>`:''}
 
   <div class="card">
     <span class="eyebrow">提示（想不起来时点开看）</span>
@@ -1259,36 +1308,46 @@ async function vAdd(){
     d.points = list;
   };
 
-  /* ---- 归类那两栏：输入框随便改，底下的胶囊点一下就填 ---- */
+  /* ---- 归类：最近整组快捷填入，科目 / 子项也都能直接改 ---- */
+  const fs = $('#fSub'), ft = $('#fTopic');
+  const markSubjects = ()=> app().querySelectorAll('[data-sub-v]').forEach(x=>
+    x.classList.toggle('on', x.dataset.subV===(fs?fs.value.trim():'')));
+  const markRecent = ()=> app().querySelectorAll('[data-loc-sub]').forEach(x=>
+    x.classList.toggle('on', x.dataset.locSub===(fs?fs.value.trim():'') &&
+      x.dataset.locTopic===(ft?ft.value.trim():'')));
   const paintTopics = ()=>{
-    const box = $('#topicChips'); if(!box) return;
-    box.innerHTML = topicChipHTML($('#fSub').value.trim(), $('#fTopic').value.trim());
+    const box = $('#topicChips'); if(!box || !fs || !ft) return;
+    box.innerHTML = topicChipHTML(fs.value.trim(), ft.value.trim());
     box.querySelectorAll('[data-topic-v]').forEach(ch=> ch.onclick = ()=>{
-      const inp = $('#fTopic'), v = ch.dataset.topicV;
-      inp.value = (inp.value.trim()===v) ? '' : v;     // 再点一下取消
-      d.tags = inp.value.trim() ? [inp.value.trim()] : [];
-      paintTopics();
+      const v = ch.dataset.topicV;
+      ft.value = (ft.value.trim()===v) ? '' : v;     // 再点一下取消
+      d.tags = ft.value.trim() ? [ft.value.trim()] : [];
+      paintTopics(); markRecent();
     });
   };
-  const fs = $('#fSub');
   if(fs){
     fs.oninput  = ()=>{ d.subject = fs.value.trim() || SUBJECTS[0];
-      app().querySelectorAll('[data-sub-v]').forEach(x=>
-        x.classList.toggle('on', x.dataset.subV===fs.value.trim())); };
+      markSubjects(); markRecent(); };
     fs.onchange = paintTopics;
     app().querySelectorAll('[data-sub-v]').forEach(ch=> ch.onclick = ()=>{
       fs.value = ch.dataset.subV; d.subject = ch.dataset.subV;
-      app().querySelectorAll('[data-sub-v]').forEach(x=>
-        x.classList.toggle('on', x.dataset.subV===fs.value));
-      paintTopics();
+      markSubjects(); paintTopics(); markRecent();
     });
   }
-  const ft = $('#fTopic');
   if(ft) ft.oninput = ()=>{
     const v = ft.value.trim(); d.tags = v ? [v] : [];
     app().querySelectorAll('[data-topic-v]').forEach(x=>
       x.classList.toggle('on', x.dataset.topicV===v));
+    markRecent();
   };
+  app().querySelectorAll('[data-loc-sub]').forEach(ch=> ch.onclick = ()=>{
+    if(!fs || !ft) return;
+    fs.value = ch.dataset.locSub;
+    ft.value = ch.dataset.locTopic;
+    d.subject = fs.value.trim() || SUBJECTS[0];
+    d.tags = ft.value.trim() ? [ft.value.trim()] : [];
+    markSubjects(); paintTopics(); markRecent();
+  });
   paintTopics();
 
   $('#goAI').onclick = ()=>openAI();
@@ -1331,13 +1390,33 @@ async function vAdd(){
   if(bid) bid.onclick = async ()=>{ sync(); await DB.delImage(d.image);
     delete S.imgURL[d.image]; d.image=''; vAdd(); };
 
+  const focusPoint = (i,j)=>{
+    const sel = j===undefined ? `[data-pi="${i}"]:not([data-sj])`
+                              : `[data-pi="${i}"][data-sj="${j}"]`;
+    const inp = app().querySelector(sel);
+    if(inp){ inp.focus(); inp.scrollIntoView({block:'center',behavior:'smooth'}); }
+  };
   const ap = $('#bAddPt');
-  if(ap) ap.onclick = ()=>{ sync(); d.points.push({t:'',subs:[]}); vAdd(); };
-  app().querySelectorAll('[data-addsub]').forEach(b=> b.onclick = ()=>{
+  if(ap) ap.onclick = async ()=>{
+    sync(); const i=d.points.length; d.points.push({t:'',subs:[]});
+    await vAdd(); focusPoint(i);
+  };
+  app().querySelectorAll('[data-addsub]').forEach(b=> b.onclick = async ()=>{
     sync();
     const i = +b.dataset.addsub;
-    if(d.points[i]) d.points[i].subs.push('');
-    vAdd(); });
+    if(!d.points[i]) return;
+    const j = d.points[i].subs.length;
+    d.points[i].subs.push('');
+    await vAdd(); focusPoint(i,j);
+  });
+  app().querySelectorAll('[data-pi][data-sj]').forEach(inp=> inp.onkeydown = async e=>{
+    if(e.key!=='Enter') return;
+    e.preventDefault(); sync();
+    const i=+inp.dataset.pi, j=+inp.dataset.sj;
+    if(!d.points[i]) return;
+    d.points[i].subs.splice(j+1,0,'');
+    await vAdd(); focusPoint(i,j+1);
+  });
   app().querySelectorAll('[data-px]').forEach(b=> b.onclick = ()=>{
     sync();
     const i = +b.dataset.px;
@@ -1355,6 +1434,7 @@ async function vAdd(){
     if(d.type==='qa'     && !d.back.trim())         return toast('答案还是空的');
     if(d.type==='points' && !d.points.length)       return toast('至少写一条采分点');
     if(S.editing) delete d.aiUnverified;   // 你亲手改过 = 已核对
+    d.locationAt = Date.now();             // 用于排序「最近归类」
     LAST.set(d.subject, topicOf(d));       // 下一道题默认接着归到这儿
     await saveCard(d);
     if(S.editing){ S.draft=null; S.editing=false; S.tab='list'; render(); toast('已保存'); }
@@ -1621,6 +1701,8 @@ async function doImport(e){
   }
   S.cards = await DB.allCards();
   S.imgURL = {};
+  const last = newestCardLocation();
+  if(last) LAST.set(last.sub, last.topic);  // 导入后下一道自动接着最新归类
   render();
   toast('导入完成');
 }
@@ -1800,6 +1882,7 @@ async function keepRes(i){
   c.hint = (d.hint||'').trim();
   c.image = it.imgKey || '';
   if(!d.answerVerified) c.aiUnverified = true;
+  c.locationAt = Date.now();
   LAST.set(c.subject, topicOf(c));
   await saveCard(c);
   it.imgKey = null;                        // 图已经交给这张卡，丢弃时别删
