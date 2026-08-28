@@ -1712,8 +1712,8 @@ async function doImport(e){
    8.5 自动录题 —— 上传截图，模型识别 + 拆采分点，你确认后入库
    ======================================================================= */
 const AI_PRESETS = {
-  zhipu : {n:'智谱 GLM（有免费档）', base:'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-           model:'glm-4v-flash'},
+  zhipu : {n:'智谱 GLM', base:'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+           model:'glm-4.6v'},
   qwen  : {n:'通义千问 VL',         base:'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
            model:'qwen-vl-plus'},
   custom: {n:'自定义 / 中转地址',    base:'', model:''}
@@ -1725,22 +1725,88 @@ const AIcfg = {
   ok(){ const c=this.get(); return !!(c.key && c.base && c.model); }
 };
 
-const AI_PROMPT = `你是备考助手。图片是一道考题的截图。请严格完成：
-1. 逐字识别题干（含设问和选项），原样保留，不要改写、缩写或补充，放进 front。
-2. 归类，只能从这个列表选一个：中国古代史/中国近代史/中国现代史/世界古代史/世界近代史/世界现代史/教资科目一/教资科目二
-3. 再给一个更细的"考点"放进 topic：这道题考的知识点名，两到六个字，比如 洋务运动 / 教学原则 / 罗马法 / 新文化运动。
-4. 把答案拆成"采分点"放进 points 数组：一条一个要点，每条尽量短（十几个字），3 到 8 条为宜，顺序按答题时该说的顺序。某一条要点底下还能再拆成并列的小点时，写成 {"t":"这条要点","subs":["小点一","小点二"]}；拆不出小点的就直接写一句字符串。
-5. 关于答案：如果截图里本身给出了答案或解析，据此拆分，answerVerified 填 true；如果截图里没有答案，你可以自己作答，但 answerVerified 必须填 false。绝不能把自己的推断说成是原文给的。
-6. 再写一条"提示"放进 hint：想不起来时能勾出记忆的线索——一共几条、时间锚点、口诀、每条的首字、关键人物。不要把采分点原样抄进 hint，抄了就没得想了。
+const AI_PROMPT = `你是手写备考笔记整理助手。先在内部判断版面和编号层级，再输出结果。必须遵守：
 
-只输出 JSON，不要 markdown 代码块，不要任何解释：
-{"subject":"","topic":"","front":"","points":[],"hint":"","answerVerified":false}`;
+【先分开题目和答案】
+1. front 只能放题目、设问和选项；绝不能放答案、解析或采分点，也不能在 front 里写“题目：”。
+2. “答、答案、参考答案、解析”之后的文字全部属于答案。即使没有这些标记，只要标题或设问之后出现成组编号要点，也把这些要点当作答案。
+3. 手写页只有一个未编号标题、下面全是编号内容时：未编号标题是 front，编号内容是 points。
+4. 没有题目或标题时，front 填“未识别到题目”，不要拿第一条答案冒充题目。
+5. 划掉、涂黑、明显删除的字不要录入；看不清的字不要猜造。
+
+【识别所有常见编号并建立层级】
+6. 下列写法都可能是一组并列编号：
+   中文数字：一、 二、 三、；一. 二. 三.；（一）（二）（三）；(一)(二)(三)
+   阿拉伯数字：1、2、3、；1. 2. 3.；1) 2) 3)；（1）（2）（3）；(1)(2)(3)
+   圈号数字：①②③④⑤⑥⑦⑧⑨⑩
+   也要识别顿号、句点、括号、圈号和手写不规范的等价形式。
+7. 编号只是结构标记，不写进 t 或 subs 的正文里。结合缩进、上下位置、编号形式和语义判断层级，不要只按数字大小判断。
+8. 同一缩进且编号形式相同的是同级。缩进更深，或出现在某个主项下面的第二套编号，是该主项的子项。例如“一、……”下面的“1. 2. 3.”必须放进这一主项的 subs；如果主项本来用“1、2、3”，其下的“(1)(2)(3)”或“①②③”也放进 subs。
+9. points 中每个主项必须统一写成对象 {"t":"主项正文","subs":["子项一","子项二"]}。没有子项也必须写空数组 subs:[]。只支持主项和子项两层；更深层内容合并进最接近的子项，不要另造字段。
+10. 保持原文顺序和原意。原文已有答案时只做去编号和分层，不要改写或补充；图片确实没有答案时才可自行作答，并把 answerVerified 设为 false。原文有答案或解析则设为 true。
+
+例：图片内容是“保持好成绩的方法\n一、坚持学习\n  1. 每天复习\n  2. 定时总结\n二、提高效率”，则输出：
+front="保持好成绩的方法"
+points=[{"t":"坚持学习","subs":["每天复习","定时总结"]},{"t":"提高效率","subs":[]}]
+
+【其他字段】
+11. subject 只能从以下列表选一个：中国古代史/中国近代史/中国现代史/世界古代史/世界近代史/世界现代史/教资科目一/教资科目二。
+12. topic 填两到六个字的具体考点；hint 填记忆线索，可以写条数、首字、时间或人物，但不要照抄完整答案。
+
+只输出一个合法 JSON 对象，不要 markdown，不要解释，所有键都必须存在：
+{"subject":"","topic":"","front":"","points":[{"t":"","subs":[]}],"hint":"","answerVerified":false}`;
 
 function pickJSON(txt){
   let t = (txt||'').trim().replace(/^```(json)?/i,'').replace(/```$/,'').trim();
   const a = t.indexOf('{'), b = t.lastIndexOf('}');
   if(a<0 || b<a) throw new Error('模型没返回 JSON');
   return JSON.parse(t.slice(a,b+1));
+}
+
+// 第二道保险：即使模型把“答①……”塞回题目栏，也在展示前切掉。
+function cleanAIFront(front, points){
+  let s = String(front||'').trim()
+    .replace(/^\s*(?:题目|题干)\s*[:：]\s*/,'');
+  if(!s) return '未识别到题目';
+
+  // “答/答案/解析”有时会和第一条要点挤在同一行，例如“答写①……”。
+  const answerMark = /\s*(?:参考答案|答案|解析|答(?:题|写)?)\s*[:：]?\s*(?=[①-⑳一二三四五六七八九十（(]|\d+[、.．)）])/;
+  const hit = s.search(answerMark);
+  if(hit>=0) s = s.slice(0,hit).trim();
+  if(!s) return '未识别到题目';
+
+  const bodies = (points||[]).map(ptObj)
+    .reduce((a,p)=>a.concat([p.t],p.subs),[])
+    .map(x=>String(x).replace(/\s/g,'').trim()).filter(Boolean);
+  const numbered = /^\s*(?:[①-⑳]|[（(]?(?:[一二三四五六七八九十]+|\d+)[）)]?[、.．)）]?)[\s、.．)）]*/;
+  const lines = s.split(/\n+/), kept = [];
+  for(let i=0;i<lines.length;i++){
+    const line = lines[i].trim();
+    if(!line) continue;
+    const body = line.replace(numbered,'').replace(/\s/g,'');
+    // 有题目行在前，且编号行与采分点重合，说明答案被重复写进了 front。
+    if(kept.length && numbered.test(line) && bodies.some(x=>x===body || x.includes(body) || body.includes(x))) break;
+    kept.push(line);
+  }
+  s = kept.join('\n').trim();
+  return s || '未识别到题目';
+}
+
+function normalizeAIResult(raw){
+  const d = raw && typeof raw==='object' ? raw : {};
+  const points = (Array.isArray(d.points) ? d.points : [])
+    .map(ptObj).map(p=>({
+      t:p.t.trim(),
+      subs:p.subs.map(x=>x.trim()).filter(Boolean)
+    })).filter(p=>p.t || p.subs.length);
+  return {
+    subject:String(d.subject||''),
+    topic:String(d.topic||''),
+    front:cleanAIFront(d.front, points),
+    points:points,
+    hint:String(d.hint||''),
+    answerVerified:d.answerVerified===true
+  };
 }
 
 async function aiAnalyze(blob){
@@ -1756,10 +1822,10 @@ async function aiAnalyze(blob){
   // 思考模式：识题这活儿用不上，关掉省一半输出费用，也快一截。
   // 有的服务商不认这个字段，认不出就自动去掉重发一次。
   const wantThink = c.think === 'on';
-  const send = async withThinking =>{
-    const body = withThinking
-      ? Object.assign({}, base, {thinking:{type: wantThink ? 'enabled' : 'disabled'}})
-      : base;
+  const send = async (withThinking, withJSON) =>{
+    let body = Object.assign({}, base);
+    if(withThinking) body.thinking = {type: wantThink ? 'enabled' : 'disabled'};
+    if(withJSON) body.response_format = {type:'json_object'};
     try{
       return await fetch(c.base, {method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
@@ -1769,8 +1835,9 @@ async function aiAnalyze(blob){
     }
   };
 
-  let r = await send(true);
-  if(!r.ok && (r.status===400 || r.status===422)) r = await send(false);
+  let r = await send(true, true);
+  if(!r.ok && (r.status===400 || r.status===422)) r = await send(false, true);
+  if(!r.ok && (r.status===400 || r.status===422)) r = await send(false, false);
   if(!r.ok){
     const t = await r.text();
     throw new Error('接口报错 '+r.status+'：'+t.slice(0,140));
@@ -1779,7 +1846,7 @@ async function aiAnalyze(blob){
   const msg = j.choices && j.choices[0] && j.choices[0].message;
   let txt = msg ? msg.content : '';
   if(Array.isArray(txt)) txt = txt.map(x=>x.text||'').join('');
-  return pickJSON(txt);
+  return normalizeAIResult(pickJSON(txt));
 }
 
 const AIP = {items:[]};
