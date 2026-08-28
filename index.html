@@ -97,6 +97,12 @@ input,textarea,select{font:inherit;color:inherit}
 .pt.on .box{background:var(--pine);border-color:var(--pine);color:#fff}
 .pt .t{font-size:.98rem;color:var(--mute);line-height:1.5}
 .pt.on .t{color:var(--ink)}
+.pt .sc{font-weight:400;font-size:.74rem;color:var(--mute);margin-left:8px;
+  background:var(--paper);padding:1px 7px;border-radius:5px}
+.subs{margin:-3px 0 5px 35px;padding-left:12px;border-left:1.5px solid var(--line)}
+.pt.sub{padding:5px 0}
+.pt.sub .box{width:19px;height:19px;line-height:17px;font-size:.7rem;border-radius:5px}
+.pt.sub .t{font-size:.89rem}
 .grades{display:flex;gap:8px}
 .grades button{flex:1;padding:13px 0;background:#fff;border:1.5px solid var(--line);
   border-radius:12px;text-align:center}
@@ -128,6 +134,17 @@ input,textarea,select{font:inherit;color:inherit}
 .ptrow .i{width:20px;font-size:.8rem;color:var(--mute)}
 .ptrow input{flex:1;padding:10px;background:var(--paper);border:none;border-radius:8px;font-size:.95rem}
 .ptrow .x{padding:0 8px;color:var(--ochre);font-size:.85rem}
+.ptblock{padding:10px 0 4px;border-bottom:1px dashed var(--line)}
+.ptblock:last-child{border-bottom:none}
+.ptrow.sub{margin-left:26px}
+.ptrow.sub .i{width:12px;text-align:center}
+.ptrow.sub input{padding:8px 10px;font-size:.9rem;background:#F5F7F8}
+.tool.mini{margin-left:28px;padding:6px 12px;font-size:.78rem;background:transparent;
+  border:1px dashed var(--line);color:var(--mute)}
+.chiprow{display:flex;overflow-x:auto;gap:0;margin-top:9px;-webkit-overflow-scrolling:touch}
+.chiprow::-webkit-scrollbar{display:none}
+.chiprow .chip{white-space:nowrap;flex-shrink:0;margin:0 7px 0 0;padding:6px 13px;font-size:.82rem;background:var(--paper)}
+.chiprow .chip.on{background:var(--ink);color:#fff}
 #thumb{width:100%;border-radius:9px;margin-top:12px;display:block}
 
 /* ---- list ---- */
@@ -314,9 +331,71 @@ const SUBJECTS = ['中国古代史','中国近代史','中国现代史','世界�
 const ERRTYPES = ['不会','记混','看错题'];
 const TYPENAME = {cloze:'挖空', qa:'问答', points:'采分点'};
 
+/* ---- 归类：科目（大类）+ 考点（子项，存在 tags[0]）---- */
+const topicOf = c => (((c&&c.tags)||[])[0]||'').trim();
+
+// 内置那几个科目，加上题库里自己写过的
+function allSubjects(){
+  const out = [], seen = {};
+  SUBJECTS.forEach(s=>{ seen[s]=1; out.push(s); });
+  S.cards.forEach(c=>{ const s=(c.subject||'').trim();
+    if(s && !seen[s]){ seen[s]=1; out.push(s); } });
+  return out;
+}
+// 某个科目下用过的考点，最近录入的排前面；不传科目就是全部
+function allTopics(sub){
+  const m = {};
+  S.cards.forEach(c=>{
+    if(sub && (c.subject||'').trim()!==sub) return;
+    const t = topicOf(c);
+    if(t) m[t] = Math.max(m[t]||0, c.created||0);
+  });
+  return Object.keys(m).sort((a,b)=>m[b]-m[a]);
+}
+// 上一次录题归到哪儿，下一道题默认接着用
+const LAST = {
+  get(){ try{ return JSON.parse(localStorage.getItem('bs_last')||'{}'); }catch(e){ return {}; } },
+  set(sub,topic){ localStorage.setItem('bs_last',
+    JSON.stringify({sub:(sub||'').trim(), topic:(topic||'').trim()})); }
+};
+
+/* ---- 采分点：一条可以是字符串（老数据），也可以是 {t:'主点', subs:['小点']} ---- */
+function ptObj(p){
+  if(p && typeof p==='object')
+    return {t:String(p.t||''), subs:(p.subs||[]).map(x=>String(x==null?'':x))};
+  return {t:String(p==null?'':p), subs:[]};
+}
+const ptsOf = c => (((c&&c.points)||[])).map(ptObj);
+// 存盘时：没有小点的还原成一句字符串，备份文件才不会变胖
+function ptPack(o){
+  const t = (o.t||'').trim(), subs = (o.subs||[]).map(s=>String(s).trim()).filter(Boolean);
+  return subs.length ? {t:t, subs:subs} : t;
+}
+const ptClean = list => list.map(ptObj).map(ptPack)
+  .filter(p => typeof p==='string' ? !!p : (p.t || p.subs.length));
+// 主点连同小点铺平成一段文字，搜索和朗读用
+const ptFlat = c => ptsOf(c).map(p=>[p.t].concat(p.subs).join(' ')).join(' ');
+// 文本框 ⇄ 采分点：缩进或以 ·-• 开头的行算上一条的小点
+function linesToPts(txt){
+  const out = [];
+  String(txt||'').split(/\n/).forEach(raw=>{
+    if(!raw.trim()) return;
+    const isSub = /^(\s|[-·•*—])/.test(raw);
+    const t = raw.replace(/^[\s]*[-·•*—]?[\s]*/,'').trim();
+    if(!t) return;
+    if(isSub && out.length) out[out.length-1].subs.push(t);
+    else out.push({t:t, subs:[]});
+  });
+  return out;
+}
+const ptsToLines = arr => (arr||[]).map(ptObj)
+  .map(p=>[p.t].concat(p.subs.map(s=>'  · '+s)).join('\n')).join('\n');
+
 function blankCard(){
+  const l = LAST.get();
   return {id: Date.now().toString(36)+Math.random().toString(36).slice(2,7),
-    type:'points', subject:SUBJECTS[0], tags:[], front:'', back:'', points:[''],
+    type:'points', subject:l.sub||SUBJECTS[0], tags:l.topic?[l.topic]:[],
+    front:'', back:'', points:[{t:'',subs:[]}],
     hint:'', image:'', created:Date.now(), due:Date.now(), interval:0, ease:2.5,
     reps:0, lapses:0, step:0, errorType:null, history:[]};
 }
@@ -383,7 +462,7 @@ const isDue = (c,at)=> (c.due||0) <= (at||Date.now());
 // 「记混」的题排最前，并按知识点聚在一起对比
 function buildQueue(cards){
   const now = Date.now(), due = cards.filter(c=>isDue(c,now));
-  const key = c => (c.tags&&c.tags[0]) || c.subject || '';
+  const key = c => topicOf(c) || c.subject || '';
   const mix = due.filter(c=>c.errorType==='记混')
                  .sort((a,b)=> key(a).localeCompare(key(b)) || (a.due-b.due));
   const rest = due.filter(c=>c.errorType!=='记混').sort((a,b)=>(a.due||0)-(b.due||0));
@@ -425,7 +504,8 @@ function shuffle(a){ for(let i=a.length-1;i>0;i--){
    3. 全局状态
    ======================================================================= */
 const S = {cards:[], tab:'today', draft:null, editing:false,
-           filter:'all', kw:'', imgURL:{}, fontSize:localStorage.getItem('bs_font')||'17'};
+           filter:'all', topic:'', kw:'', imgURL:{},
+           fontSize:localStorage.getItem('bs_font')||'17'};
 const $   = s => document.querySelector(s);
 const app = ()=>document.getElementById('app');
 
@@ -723,7 +803,8 @@ function vToday(){
 }
 
 /* ---------- 复习 ---------- */
-const R = {queue:[], i:0, card:null, segs:[], revealed:false, hinted:false, checked:[], sum:[0,0,0]};
+const R = {queue:[], i:0, card:null, segs:[], revealed:false, hinted:false,
+           checked:[], subChk:[], sum:[0,0,0]};
 
 function startReview(){
   R.queue = buildQueue(S.cards); R.i = 0; R.sum = [0,0,0];
@@ -743,7 +824,9 @@ function loadCard(){
   R.card = R.queue[R.i];
   R.segs = R.card.type==='cloze' ? parseCloze(R.card.front) : [];
   R.revealed = false; R.hinted = false;
-  R.checked = (R.card.points||[]).map(()=>false);
+  const ps = ptsOf(R.card);
+  R.checked = ps.map(()=>false);
+  R.subChk  = ps.map(p=>p.subs.map(()=>false));
   renderReview();
 }
 
@@ -760,11 +843,17 @@ async function renderReview(){
     bodyHTML = `<div class="qtext">${esc(c.front)}</div>` + (R.revealed
       ? `<div class="answer"><span class="eyebrow">答案</span><p>${esc(c.back)}</p></div>` : '');
   }else{
+    const ps = ptsOf(c);
     bodyHTML = `<div class="qtext">${esc(c.front)}</div>` + (R.revealed
       ? `<div class="pts"><span class="eyebrow">答对哪几点，就点亮哪几点</span>
-          ${(c.points||[]).map((p,i)=>`<div class="pt${R.checked[i]?' on':''}" data-pt="${i}">
-             <span class="box">✓</span><span class="t">${esc(p)}</span></div>`).join('')}
-          <div class="muted" style="margin-top:9px">命中 ${R.checked.filter(Boolean).length} / ${(c.points||[]).length}</div></div>`
+          ${ps.map((p,i)=>`
+            <div class="pt${R.checked[i]?' on':''}" data-pt="${i}">
+              <span class="box">✓</span><span class="t">${esc(p.t)}${
+                p.subs.length?`<b class="sc">${(R.subChk[i]||[]).filter(Boolean).length}/${p.subs.length}</b>`:''}</span></div>
+            ${p.subs.length?`<div class="subs">${p.subs.map((s,j)=>
+              `<div class="pt sub${(R.subChk[i]||[])[j]?' on':''}" data-pt="${i}" data-sub="${j}">
+                 <span class="box">✓</span><span class="t">${esc(s)}</span></div>`).join('')}</div>`:''}`).join('')}
+          <div class="muted" style="margin-top:9px">命中 ${R.checked.filter(Boolean).length} / ${ps.length}</div></div>`
       : `<div class="muted" style="margin-top:14px">先自己在心里（或嘴上）答一遍，再对采分点。</div>`);
   }
 
@@ -791,7 +880,17 @@ async function renderReview(){
   el.querySelectorAll('[data-seg]').forEach(s=> s.onclick = ()=>{
     const i = +s.dataset.seg; R.segs[i].open = !R.segs[i].open; renderReview(); });
   el.querySelectorAll('[data-pt]').forEach(p=> p.onclick = ()=>{
-    const i = +p.dataset.pt; R.checked[i] = !R.checked[i]; renderReview(); });
+    const i = +p.dataset.pt;
+    if(!R.subChk[i]) R.subChk[i] = [];
+    if(p.dataset.sub !== undefined){            // 点的是小点：只翻它自己
+      const j = +p.dataset.sub;
+      R.subChk[i][j] = !R.subChk[i][j];
+      if(R.subChk[i].length) R.checked[i] = R.subChk[i].every(Boolean);
+    }else{                                      // 点的是主点：底下的小点跟着走
+      R.checked[i] = !R.checked[i];
+      R.subChk[i] = R.subChk[i].map(()=>R.checked[i]);
+    }
+    renderReview(); });
   el.querySelectorAll('[data-g]').forEach(b=> b.onclick = ()=>doGrade(+b.dataset.g));
 
   const rv = $('#rReveal');
@@ -806,7 +905,8 @@ async function renderReview(){
 async function doGrade(g){
   const c = R.card;
   const up = schedule(c,g);
-  if(c.type==='points' && c.points.length) up.lastScore = R.checked.filter(Boolean).length+'/'+c.points.length;
+  if(c.type==='points' && ptsOf(c).length)
+    up.lastScore = R.checked.filter(Boolean).length+'/'+ptsOf(c).length;
   if(g===2) up.errorType = null;
   await saveCard(up);
   R.sum[g]++;
@@ -886,7 +986,8 @@ const wait = ms => new Promise(r=>setTimeout(r,ms));
 function frontSpeech(c){ return plain(c.front); }
 function backSpeech(c){
   if(c.type==='qa') return c.back;
-  if(c.type==='points') return (c.points||[]).join('。');
+  if(c.type==='points') return ptsOf(c)
+    .map(p=> p.subs.length ? p.t+'：'+p.subs.join('，') : p.t).join('。');
   const m = c.front.match(/【([^】]*)】/g);
   return m ? '关键词：'+m.map(x=>x.replace(/[【】]/g,'')).join('、') : '';
 }
@@ -1051,6 +1152,19 @@ const PH = {
   points: '例：简述中学常用的教学原则。'
 };
 
+// 归类那两排胶囊：点一下就把上面的输入框填上
+function subChipHTML(cur){
+  return allSubjects().map(s=>
+    `<span class="chip${s===(cur||'').trim()?' on':''}" data-sub-v="${esc(s)}">${esc(s)}</span>`).join('');
+}
+function topicChipHTML(sub, cur){
+  const ts = allTopics((sub||'').trim()).slice(0,20);
+  if(!ts.length) return `<span class="muted" style="font-size:.8rem;padding-top:3px">
+    这个科目下还没有考点，上面直接写一个就是。</span>`;
+  return ts.map(t=>
+    `<span class="chip${t===(cur||'').trim()?' on':''}" data-topic-v="${esc(t)}">${esc(t)}</span>`).join('');
+}
+
 function openEdit(id){
   const c = S.cards.find(x=>x.id===id);
   if(!c) return;
@@ -1077,8 +1191,13 @@ async function vAdd(){
 
   <div class="card">
     <span class="eyebrow">归到哪里</span>
-    <select class="input" id="fSub">${SUBJECTS.map(s=>
-      `<option${s===d.subject?' selected':''}>${s}</option>`).join('')}</select>
+    <input class="input" id="fSub" value="${esc(d.subject||'')}" placeholder="科目，比如 中国近代史">
+    <div class="chiprow" id="subChips">${subChipHTML(d.subject)}</div>
+    <span class="eyebrow" style="margin-top:16px">考点 · 子项（可留空）</span>
+    <input class="input" id="fTopic" value="${esc(topicOf(d))}" placeholder="比如 洋务运动、教学原则">
+    <div class="chiprow" id="topicChips">${topicChipHTML(d.subject, topicOf(d))}</div>
+    <span class="tip">默认接着上一道题的归类，改一下就行。写了考点之后，题库能按考点单独筛，
+      统计里的「最该回头看的」也会精确到考点，而不是笼统一个科目。</span>
   </div>
 
   <div class="card">
@@ -1097,10 +1216,20 @@ async function vAdd(){
 
   ${d.type==='points' ? `<div class="card">
     <span class="eyebrow">采分点（一条一个，复习时逐条对勾）</span>
-    <div id="ptList">${(d.points||[]).map((p,i)=>
-      `<div class="ptrow"><span class="i num">${i+1}</span>
-        <input value="${esc(p)}" data-pi="${i}"><button class="x" data-px="${i}">删</button></div>`).join('')}</div>
-    <button class="tool" id="bAddPt">加一条采分点</button></div>`:''}
+    <div id="ptList">${ptsOf(d).map((p,i)=>
+      `<div class="ptblock">
+        <div class="ptrow"><span class="i num">${i+1}</span>
+          <input value="${esc(p.t)}" data-pi="${i}" placeholder="第 ${i+1} 条">
+          <button class="x" data-px="${i}">删</button></div>
+        ${p.subs.map((s,j)=>
+          `<div class="ptrow sub"><span class="i">·</span>
+            <input value="${esc(s)}" data-pi="${i}" data-sj="${j}" placeholder="小点">
+            <button class="x" data-px="${i}" data-sx="${j}">删</button></div>`).join('')}
+        <button class="tool mini" data-addsub="${i}">＋ 给第 ${i+1} 条加个小点</button>
+      </div>`).join('')}</div>
+    <button class="tool" id="bAddPt">加一条采分点</button>
+    <span class="tip">一条采分点底下还能再拆成并列的小点。复习时小点缩在主点下面，
+      可以单独打勾，主点旁边会显示这条命中了几个小点。</span></div>`:''}
 
   <div class="card">
     <span class="eyebrow">提示（想不起来时点开看）</span>
@@ -1116,11 +1245,51 @@ async function vAdd(){
 
   const sync = ()=>{
     d.front = $('#fFront').value;
-    d.subject = $('#fSub').value;
+    const su = $('#fSub');    if(su) d.subject = su.value.trim() || SUBJECTS[0];
+    const tp = $('#fTopic');  if(tp){ const v = tp.value.trim(); d.tags = v ? [v] : []; }
     d.hint = $('#fHint').value;
     const b = $('#fBack'); if(b) d.back = b.value;
-    app().querySelectorAll('[data-pi]').forEach(inp=> d.points[+inp.dataset.pi] = inp.value);
+    const list = ptsOf(d);
+    app().querySelectorAll('[data-pi]').forEach(inp=>{
+      const i = +inp.dataset.pi;
+      if(!list[i]) return;
+      if(inp.dataset.sj !== undefined) list[i].subs[+inp.dataset.sj] = inp.value;
+      else list[i].t = inp.value;
+    });
+    d.points = list;
   };
+
+  /* ---- 归类那两栏：输入框随便改，底下的胶囊点一下就填 ---- */
+  const paintTopics = ()=>{
+    const box = $('#topicChips'); if(!box) return;
+    box.innerHTML = topicChipHTML($('#fSub').value.trim(), $('#fTopic').value.trim());
+    box.querySelectorAll('[data-topic-v]').forEach(ch=> ch.onclick = ()=>{
+      const inp = $('#fTopic'), v = ch.dataset.topicV;
+      inp.value = (inp.value.trim()===v) ? '' : v;     // 再点一下取消
+      d.tags = inp.value.trim() ? [inp.value.trim()] : [];
+      paintTopics();
+    });
+  };
+  const fs = $('#fSub');
+  if(fs){
+    fs.oninput  = ()=>{ d.subject = fs.value.trim() || SUBJECTS[0];
+      app().querySelectorAll('[data-sub-v]').forEach(x=>
+        x.classList.toggle('on', x.dataset.subV===fs.value.trim())); };
+    fs.onchange = paintTopics;
+    app().querySelectorAll('[data-sub-v]').forEach(ch=> ch.onclick = ()=>{
+      fs.value = ch.dataset.subV; d.subject = ch.dataset.subV;
+      app().querySelectorAll('[data-sub-v]').forEach(x=>
+        x.classList.toggle('on', x.dataset.subV===fs.value));
+      paintTopics();
+    });
+  }
+  const ft = $('#fTopic');
+  if(ft) ft.oninput = ()=>{
+    const v = ft.value.trim(); d.tags = v ? [v] : [];
+    app().querySelectorAll('[data-topic-v]').forEach(x=>
+      x.classList.toggle('on', x.dataset.topicV===v));
+  };
+  paintTopics();
 
   $('#goAI').onclick = ()=>openAI();
 
@@ -1163,19 +1332,30 @@ async function vAdd(){
     delete S.imgURL[d.image]; d.image=''; vAdd(); };
 
   const ap = $('#bAddPt');
-  if(ap) ap.onclick = ()=>{ sync(); d.points.push(''); vAdd(); };
+  if(ap) ap.onclick = ()=>{ sync(); d.points.push({t:'',subs:[]}); vAdd(); };
+  app().querySelectorAll('[data-addsub]').forEach(b=> b.onclick = ()=>{
+    sync();
+    const i = +b.dataset.addsub;
+    if(d.points[i]) d.points[i].subs.push('');
+    vAdd(); });
   app().querySelectorAll('[data-px]').forEach(b=> b.onclick = ()=>{
-    sync(); d.points.splice(+b.dataset.px,1); vAdd(); });
+    sync();
+    const i = +b.dataset.px;
+    if(b.dataset.sx !== undefined){ if(d.points[i]) d.points[i].subs.splice(+b.dataset.sx,1); }
+    else d.points.splice(i,1);
+    if(!d.points.length) d.points = [{t:'',subs:[]}];
+    vAdd(); });
 
   $('#bSave').onclick = async ()=>{
     sync();
-    if(d.type==='points') d.points = (d.points||[]).filter(p=>p&&p.trim());
+    if(d.type==='points') d.points = ptClean(d.points||[]);
     d.hint = (d.hint||'').trim();
     if(!d.front.trim() && !d.image) return toast('题干还是空的');
     if(d.type==='cloze'  && d.front.indexOf('【')<0) return toast('还没挖空，用【】包住关键词');
     if(d.type==='qa'     && !d.back.trim())         return toast('答案还是空的');
     if(d.type==='points' && !d.points.length)       return toast('至少写一条采分点');
     if(S.editing) delete d.aiUnverified;   // 你亲手改过 = 已核对
+    LAST.set(d.subject, topicOf(d));       // 下一道题默认接着归到这儿
     await saveCard(d);
     if(S.editing){ S.draft=null; S.editing=false; S.tab='list'; render(); toast('已保存'); }
     else { S.draft = blankCard(); vAdd(); toast('存好了'); }
@@ -1213,17 +1393,27 @@ function compress(file){
 /* =======================================================================
    7. 题库
    ======================================================================= */
+function topicRowHTML(){
+  const sub = SUBJECTS.concat(allSubjects()).indexOf(S.filter)>=0 ? S.filter : '';
+  const ts = allTopics(sub);
+  if(!ts.length) return '';
+  return `<span class="chip ${S.topic?'':'on'}" data-t="">${sub?sub+' · 全部考点':'不分考点'}</span>`
+    + ts.slice(0,40).map(t=>
+        `<span class="chip ${S.topic===t?'on':''}" data-t="${esc(t)}">${esc(t)}</span>`).join('');
+}
+
 function vList(){
   app().innerHTML = `
-  <input class="input" id="fKw" style="margin:0 0 12px" placeholder="搜题干或知识点" value="${esc(S.kw)}">
+  <input class="input" id="fKw" style="margin:0 0 12px" placeholder="搜题干、考点或采分点" value="${esc(S.kw)}">
   <div id="filters">
     <span class="chip ${S.filter==='all'?'on':''}" data-f="all">全部 ${S.cards.length}</span>
     <span class="chip ${S.filter==='new'?'on':''}" data-f="new">今日录入 ${
       S.cards.filter(c=>(c.created||0)>=dayStart()).length}</span>
     <span class="chip ${S.filter==='due'?'on':''}" data-f="due">待复习</span>
     <span class="chip ${S.filter==='weak'?'on':''}" data-f="weak">老是错</span>
-    ${SUBJECTS.map(s=>`<span class="chip ${S.filter===s?'on':''}" data-f="${s}">${s}</span>`).join('')}
+    ${allSubjects().map(s=>`<span class="chip ${S.filter===s?'on':''}" data-f="${esc(s)}">${esc(s)}</span>`).join('')}
   </div>
+  <div class="chiprow" id="tfilters" style="margin-top:8px">${topicRowHTML()}</div>
   <div id="listBody"></div>`;
 
   let timer;
@@ -1232,11 +1422,23 @@ function vList(){
     clearTimeout(timer);
     timer = setTimeout(renderListBody, 160);   // 不重绘输入框，拼音才不会断
   };
+  const bindTopicFilter = ()=>{
+    app().querySelectorAll('[data-t]').forEach(x=> x.onclick = ()=>{
+      S.topic = x.dataset.t;
+      app().querySelectorAll('[data-t]').forEach(y=>
+        y.classList.toggle('on', y.dataset.t===S.topic));
+      renderListBody();
+    });
+  };
   app().querySelectorAll('[data-f]').forEach(c=> c.onclick = ()=>{
     S.filter = c.dataset.f;
+    S.topic = '';                              // 换科目就把考点筛选清掉
     app().querySelectorAll('[data-f]').forEach(x=>x.classList.toggle('on', x.dataset.f===S.filter));
+    const tr = $('#tfilters');
+    if(tr){ tr.innerHTML = topicRowHTML(); bindTopicFilter(); }
     renderListBody();
   });
+  bindTopicFilter();
   renderListBody();
 }
 
@@ -1248,10 +1450,11 @@ function renderListBody(){
   else if(S.filter==='due')  l = l.filter(c=>isDue(c,now));
   else if(S.filter==='weak') l = l.filter(c=>(c.lapses||0)>=2);
   else if(S.filter!=='all')  l = l.filter(c=>c.subject===S.filter);
+  if(S.topic)                l = l.filter(c=>topicOf(c)===S.topic);
   if(S.kw){
     const k = S.kw.trim();
     l = l.filter(c=>(plain(c.front)+' '+(c.back||'')+' '+(c.hint||'')+' '
-                     +(c.tags||[]).join(' ')+' '+(c.points||[]).join(' ')).indexOf(k)>=0);
+                     +(c.tags||[]).join(' ')+' '+ptFlat(c)).indexOf(k)>=0);
   }
   l = l.slice().sort(fresh ? (a,b)=>(b.created||0)-(a.created||0)
                            : (a,b)=>(a.due||0)-(b.due||0)).slice(0,400);
@@ -1261,13 +1464,15 @@ function renderListBody(){
   ${l.length ? l.map(c=>`
     <div class="item" data-id="${c.id}">
       <div class="top"><span class="badge">${TYPENAME[c.type]||'采分点'}</span>
-        <span>${c.subject}</span><span class="sp"></span>
+        <span>${esc(c.subject)}${topicOf(c)?' · '+esc(topicOf(c)):''}</span><span class="sp"></span>
         <span class="due ${isDue(c,now)?'hot':''}">${dueText(c)}</span></div>
       <div class="tx">${esc(summary(c,44))}${c.aiUnverified?'<span class="unver">未核对</span>':''}</div>
       <div class="meta">${c.lapses?`<span class="lp">忘过 ${c.lapses} 次</span>`:''}
         ${c.errorType?`<span class="et">${c.errorType}</span>`:''}
         ${(c.hint||'').trim()?`<span style="margin-right:8px">💡 有提示</span>`:''}
-        ${(c.tags||[]).map(t=>`<span style="margin-right:8px">${esc(t)}</span>`).join('')}</div>
+        ${(()=>{ const ps=ptsOf(c), sn=ps.reduce((a,p)=>a+p.subs.length,0);
+          return ps.length ? `<span style="margin-right:8px">${ps.length} 个采分点${
+            sn?`（含 ${sn} 个小点）`:''}</span>` : ''; })()}</div>
     </div>`).join('')
    : `<div class="card muted" style="text-align:center;padding:50px 0">${
        fresh ? '今天还没录题。' : '没有符合的题。'}</div>`}`;
@@ -1313,10 +1518,7 @@ async function vStats(){
     }
   }catch(e){}
 
-  const st = strat(), noti = NOTI.get();
-  const notiState = !('Notification' in window) ? 'no'
-                  : Notification.permission==='granted' ? 'ok'
-                  : Notification.permission==='denied' ? 'denied' : 'ask';
+  const st = strat();
 
   app().innerHTML = `
   <div class="grid">
@@ -1334,26 +1536,6 @@ async function vStats(){
     <div class="seg" style="margin-top:10px">${Object.keys(STRATS).map(k=>
       `<button data-st="${k}" class="${st===k?'on':''}">${STRATS[k].n}</button>`).join('')}</div>
     <div class="tip">${STRATS[st].d}</div>
-  </div>
-
-  <div class="card">
-    <span class="eyebrow">到期提醒</span>
-    ${notiState==='no'
-      ? `<div class="muted">这个浏览器不支持通知。把应用装到主屏幕再打开试试。</div>`
-      : notiState==='denied'
-      ? `<div class="muted">系统里把通知关掉了。去「设置 → 通知 → 背书」重新打开。</div>`
-      : notiState==='ask'
-      ? `<div class="muted">开了之后，到点还有题没做完会推一条提醒。</div>
-         <button class="tool" id="ntAsk">开启通知</button>`
-      : `<div class="seg" style="margin-top:8px">
-           <button data-nt="1" class="${noti.on?'on':''}">开</button>
-           <button data-nt="0" class="${noti.on?'':'on'}">关</button>
-         </div>
-         <div class="field"><span class="eyebrow">每天几点提醒</span>
-           <input class="input" type="time" id="ntTime" value="${esc(noti.time||'20:00')}"></div>
-         <button class="tool" id="ntTest">发一条试试</button>`}
-    <span class="tip">说实话：iPhone 上的网页应用只有开着、或者刚打开的时候才推得动。
-      真出门了它多半不会响，别把它当闹钟——每天固定时间自己点开一次更靠谱。</span>
   </div>
 
   ${wk.length?`<div class="card" style="margin-top:14px"><span class="eyebrow">最该回头看的</span>
@@ -1394,14 +1576,6 @@ async function vStats(){
   app().querySelectorAll('[data-st]').forEach(b=> b.onclick = ()=>{
     localStorage.setItem('bs_strat', b.dataset.st); vStats(); toast('换成「'+STRATS[b.dataset.st].n+'」了'); });
 
-  const na = $('#ntAsk'); if(na) na.onclick = askNoti;
-  app().querySelectorAll('[data-nt]').forEach(b=> b.onclick = ()=>{
-    const n = NOTI.get(); n.on = b.dataset.nt==='1'; NOTI.set(n); vStats(); });
-  const nt = $('#ntTime'); if(nt) nt.onchange = ()=>{
-    const n = NOTI.get(); n.time = nt.value || '20:00'; n.lastFired = null; NOTI.set(n); toast('改好了'); };
-  const ntt = $('#ntTest'); if(ntt) ntt.onclick = ()=>{
-    fire('背书', '提醒长这样。今天还有 '+buildQueue(S.cards).length+' 题到期。');
-    toast('发了，没看到就是系统拦了'); };
   app().querySelectorAll('[data-fs]').forEach(b=> b.onclick = ()=>{
     S.fontSize = b.dataset.fs; localStorage.setItem('bs_font', S.fontSize); render(); });
   bindAISettings();
@@ -1453,50 +1627,6 @@ async function doImport(e){
 
 
 /* =======================================================================
-   8.8 到期提醒 —— 尽力而为：应用开着或刚打开时才推得动
-   ======================================================================= */
-const NOTI = {
-  get(){ try{ return JSON.parse(localStorage.getItem('bs_noti')||'{}'); }catch(e){ return {}; } },
-  set(v){ localStorage.setItem('bs_noti', JSON.stringify(v)); }
-};
-
-async function askNoti(){
-  if(!('Notification' in window)) return toast('这个浏览器不支持通知');
-  let p;
-  try{ p = await Notification.requestPermission(); }catch(e){ p = 'denied'; }
-  if(p==='granted'){ const n = NOTI.get(); n.on = true; n.time = n.time||'20:00'; NOTI.set(n); toast('开好了'); }
-  else toast('系统没给权限');
-  vStats();
-}
-
-async function fire(title, body){
-  try{
-    if(!('Notification' in window) || Notification.permission!=='granted') return;
-    const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
-    const opt = {body:body, icon:'icon-192.png', badge:'icon-192.png', tag:'beishu-due', renotify:true};
-    if(reg && reg.showNotification) await reg.showNotification(title, opt);
-    else new Notification(title, opt);
-  }catch(e){}
-}
-
-function checkNoti(){
-  const n = NOTI.get();
-  if(!n.on || !('Notification' in window) || Notification.permission!=='granted') return;
-  const due = buildQueue(S.cards).length;
-  const goal = RK.goal(), n2 = doneToday();
-  if(!due && n2>=goal) return;                        // 没欠账也达标了，不打扰
-  const now = new Date(), today = dkey(now);
-  if(n.lastFired === today) return;
-  const hm = String(n.time||'20:00').split(':');
-  const at = new Date(now); at.setHours(+hm[0]||20, +hm[1]||0, 0, 0);
-  if(now < at) return;
-  n.lastFired = today; NOTI.set(n);
-  fire('该复习了', n2>=goal
-    ? `今天还有 ${due} 题到期。星星已经拿到了，剩下的算加练。`
-    : `今天 ${n2}/${goal} 题，还有 ${due} 题到期。再做 ${goal-n2} 题就 +1 颗星。`);
-}
-
-/* =======================================================================
    8.5 自动录题 —— 上传截图，模型识别 + 拆采分点，你确认后入库
    ======================================================================= */
 const AI_PRESETS = {
@@ -1516,12 +1646,13 @@ const AIcfg = {
 const AI_PROMPT = `你是备考助手。图片是一道考题的截图。请严格完成：
 1. 逐字识别题干（含设问和选项），原样保留，不要改写、缩写或补充，放进 front。
 2. 归类，只能从这个列表选一个：中国古代史/中国近代史/中国现代史/世界古代史/世界近代史/世界现代史/教资科目一/教资科目二
-3. 把答案拆成"采分点"放进 points 数组：一条一个要点，每条尽量短（十几个字），3 到 8 条为宜，顺序按答题时该说的顺序。
-4. 关于答案：如果截图里本身给出了答案或解析，据此拆分，answerVerified 填 true；如果截图里没有答案，你可以自己作答，但 answerVerified 必须填 false。绝不能把自己的推断说成是原文给的。
-5. 再写一条"提示"放进 hint：想不起来时能勾出记忆的线索——一共几条、时间锚点、口诀、每条的首字、关键人物。不要把采分点原样抄进 hint，抄了就没得想了。
+3. 再给一个更细的"考点"放进 topic：这道题考的知识点名，两到六个字，比如 洋务运动 / 教学原则 / 罗马法 / 新文化运动。
+4. 把答案拆成"采分点"放进 points 数组：一条一个要点，每条尽量短（十几个字），3 到 8 条为宜，顺序按答题时该说的顺序。某一条要点底下还能再拆成并列的小点时，写成 {"t":"这条要点","subs":["小点一","小点二"]}；拆不出小点的就直接写一句字符串。
+5. 关于答案：如果截图里本身给出了答案或解析，据此拆分，answerVerified 填 true；如果截图里没有答案，你可以自己作答，但 answerVerified 必须填 false。绝不能把自己的推断说成是原文给的。
+6. 再写一条"提示"放进 hint：想不起来时能勾出记忆的线索——一共几条、时间锚点、口诀、每条的首字、关键人物。不要把采分点原样抄进 hint，抄了就没得想了。
 
 只输出 JSON，不要 markdown 代码块，不要任何解释：
-{"subject":"","front":"","points":[],"hint":"","answerVerified":false}`;
+{"subject":"","topic":"","front":"","points":[],"hint":"","answerVerified":false}`;
 
 function pickJSON(txt){
   let t = (txt||'').trim().replace(/^```(json)?/i,'').replace(/```$/,'').trim();
@@ -1593,6 +1724,7 @@ function renderAI(busy){
       ? `<button class="aibig" id="aiPick">选截图（可以一次选好几张）</button>`
       : `<button class="aibig off" id="aiSetup">还没配好识别服务 · 点这里去设置</button>`}
     <input type="file" accept="image/*" multiple id="aiFile" style="display:none">
+    <datalist id="subList">${allSubjects().map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
     ${busy ? `<div class="prog"><i style="width:${busy.pct}%"></i></div>
               <div class="muted">${busy.msg}</div>` : ''}
     ${AIP.items.map((it,i)=> resHTML(it,i)).join('')}
@@ -1617,16 +1749,19 @@ function resHTML(it,i){
     <div class="warn">${esc(it.err)}</div>
     <div class="acts"><button class="drop" data-drop="${i}">移掉</button></div></div>`;
   const d = it.data;
-  const pts = Array.isArray(d.points) ? d.points : String(d.points||'').split(/\n+/);
+  const lines = Array.isArray(d.points) ? ptsToLines(d.points) : String(d.points||'');
   return `<div class="res" data-res="${i}">
     ${it.url?`<img src="${it.url}">`:''}
     <span class="lbl">科目</span>
-    <select class="fld" data-f="subject">${SUBJECTS.map(x=>
-      `<option${x===d.subject?' selected':''}>${x}</option>`).join('')}</select>
+    <input class="fld" data-f="subject" value="${esc(d.subject||'')}" list="subList">
+    <span class="lbl">考点 · 子项</span>
+    <input class="fld" data-f="topic" value="${esc(d.topic||'')}" placeholder="留空也行">
     <span class="lbl">题目</span>
     <textarea class="fld" data-f="front">${esc(d.front)}</textarea>
     <span class="lbl">采分点 · 一行一条${d.answerVerified?'':'<span class="unver">AI 推断 · 未核对</span>'}</span>
-    <textarea class="fld" data-f="points" style="min-height:130px">${esc(pts.filter(Boolean).join('\n'))}</textarea>
+    <textarea class="fld" data-f="points" style="min-height:130px">${esc(lines)}</textarea>
+    <span class="tip" style="font-size:.75rem">要把某条再拆细，就在它下面另起一行、行首空两格或者打个「·」，
+      那一行就变成上一条的小点。</span>
     ${d.answerVerified?'':'<div class="warn">截图里没写答案，这是模型自己拆的。核对过再存，别直接背。</div>'}
     <span class="lbl">提示（复习时点开才看得到）</span>
     <textarea class="fld" data-f="hint">${esc(d.hint||'')}</textarea>
@@ -1641,7 +1776,7 @@ function bindRes(it,i){
   if(box){
     box.querySelectorAll('[data-f]').forEach(f=> f.onchange = ()=>{
       const k = f.dataset.f;
-      it.data[k] = k==='points' ? f.value.split(/\n+/).map(s=>s.trim()).filter(Boolean) : f.value;
+      it.data[k] = k==='points' ? linesToPts(f.value) : f.value;
     });
   }
   const kp = $(`[data-keep="${i}"]`); if(kp) kp.onclick = ()=>keepRes(i);
@@ -1652,19 +1787,20 @@ function bindRes(it,i){
 
 async function keepRes(i){
   const it = AIP.items[i], d = it.data;
-  const pts = (Array.isArray(d.points) ? d.points : String(d.points||'').split(/\n+/))
-                .map(s=>String(s).trim()).filter(Boolean);
+  const pts = ptClean(Array.isArray(d.points) ? d.points : linesToPts(d.points));
   if(!(d.front||'').trim() && !it.imgKey) return toast('题干是空的');
   if(!pts.length) return toast('一条采分点都没有，先补一条');
 
   const c = blankCard();
   c.type = 'points';
-  c.subject = d.subject || SUBJECTS[0];
+  c.subject = (d.subject||'').trim() || SUBJECTS[0];
+  c.tags = (d.topic||'').trim() ? [(d.topic||'').trim()] : [];
   c.front = d.front || '';
   c.points = pts;
   c.hint = (d.hint||'').trim();
   c.image = it.imgKey || '';
   if(!d.answerVerified) c.aiUnverified = true;
+  LAST.set(c.subject, topicOf(c));
   await saveCard(c);
   it.imgKey = null;                        // 图已经交给这张卡，丢弃时别删
 
@@ -1753,7 +1889,7 @@ function bindAISettings(){
       try{ await aiAnalyze(b); toast('通了，可以用了'); }
       catch(e){
         const m = e.message||'';
-        if(/跨域|连不上/.test(m)) alert('连不上。\n\n最可能是浏览器跨域被拦了，说明书第八节有解决办法（挂一个免费中转，五分钟）。\n\n原始信息：'+m);
+        if(/跨域|连不上/.test(m)) alert('连不上。\n\n最可能是浏览器跨域被拦了，说明书第十节有解决办法（挂一个免费中转，五分钟）。\n\n原始信息：'+m);
         else if(/JSON/.test(m)) toast('接口通了，返回格式待确认，可以直接试着录一张');
         else alert('接口返回：\n\n'+m);
       }
@@ -1791,10 +1927,8 @@ async function boot(){
   settleRank();
   if(speechSynthesis.getVoices().length===0) speechSynthesis.onvoiceschanged = ()=>{};
   render();
-  checkNoti();
-  setInterval(checkNoti, 60000);
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible'){ settleRank(); checkNoti();
+    if(document.visibilityState==='visible'){ settleRank();
       if(S.tab==='today' && $('#review').classList.contains('hidden')) render(); }
   });
   if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
