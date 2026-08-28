@@ -161,7 +161,7 @@ input,textarea,select{font:inherit;color:inherit}
 .lsn .ctl{display:flex;gap:10px;justify-content:center;margin-top:6px}
 .lsn .ctl button{padding:10px 20px;background:#fff;border-radius:9px;font-size:.9rem}
 .seg{display:flex;gap:0;background:var(--paper);border-radius:9px;padding:3px;margin-top:9px}
-.seg button{flex:1;padding:9px 0;border-radius:7px;font-size:.85rem;color:var(--mute)}
+.seg button{flex:1;padding:9px 2px;border-radius:7px;font-size:.85rem;color:var(--mute);white-space:nowrap}
 .seg button.on{background:#fff;color:var(--ink);font-weight:600}
 
 
@@ -194,6 +194,51 @@ input,textarea,select{font:inherit;color:inherit}
 .unver{display:inline-block;background:var(--gold-bg);color:#8a5f0c;font-size:.66rem;
   padding:2px 8px;border-radius:5px;margin-left:6px;vertical-align:middle}
 
+/* ---- 提示 ---- */
+.hintbtn{display:inline-block;padding:9px 18px;border-radius:10px;background:var(--gold-bg);
+  color:#8a5f0c;font-size:.9rem;font-weight:600;margin-top:18px}
+.hintbox{margin-top:18px;background:var(--gold-bg);border-left:3px solid var(--gold);
+  padding:12px 14px;border-radius:0 9px 9px 0;font-size:.96rem;line-height:1.75;color:#7a5406}
+.hintbox .eyebrow{color:#a8823a;margin-bottom:3px}
+
+/* ---- 段位 ---- */
+.rankcard{display:flex;align-items:center;gap:14px;background:#fff;border-radius:14px;
+  padding:13px 15px;margin-bottom:14px}
+.rankcard .em{width:62px;height:62px;flex-shrink:0;line-height:0}
+.rankcard .tx{flex:1;min-width:0;display:block}
+.rankcard .tier{display:block;font-size:1.06rem;font-weight:600;letter-spacing:.02em}
+.rankcard .sub{display:block;font-size:.78rem;color:var(--mute);margin-top:2px;line-height:1.5}
+.rankcard .em svg{display:block;width:62px;height:62px}
+.rankcard .go{color:var(--mute);font-size:1.1rem;flex-shrink:0}
+.stars{display:flex;gap:5px;margin-top:6px;line-height:0}
+.stars svg{width:16px;height:16px}
+#rankPane{position:fixed;inset:0;z-index:55;background:var(--paper);overflow-y:auto;
+  padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 24px)}
+#rankPane .inner{max-width:640px;margin:0 auto}
+.bigem{text-align:center;padding:6px 0 2px;line-height:0}
+.bigem svg{width:186px;height:186px}
+.bigname{text-align:center;font-size:1.5rem;font-weight:600;letter-spacing:.04em;margin-top:8px}
+.bigsub{text-align:center;color:var(--mute);font-size:.85rem;margin-top:3px}
+.bigstars{display:flex;gap:10px;justify-content:center;margin-top:14px;line-height:0}
+.bigstars svg{width:30px;height:30px}
+.kingpts{text-align:center;margin-top:12px}
+.kingpts .v{font-size:3.2rem;line-height:1}
+.ladder{display:flex;gap:4px;margin-top:6px}
+.ladder .lv{flex:1;text-align:center;opacity:.28;line-height:0}
+.ladder .lv.on{opacity:1}
+.ladder .lv svg{width:100%;height:auto;max-width:52px}
+.ladder .lv b{display:block;font-size:.6rem;color:var(--mute);margin-top:3px;font-weight:400;line-height:1.3}
+.logrow{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.logrow i{width:16px;height:16px;border-radius:4px;background:#E4EAEE;display:block}
+.logrow i.d{background:var(--pine)} .logrow i.m{background:#D9B4AC} .logrow i.h{background:var(--gold)}
+.lgd{display:flex;gap:14px;margin-top:10px;font-size:.74rem;color:var(--mute);flex-wrap:wrap}
+.lgd span{display:flex;align-items:center;gap:5px}
+.lgd s{width:11px;height:11px;border-radius:3px;display:block;text-decoration:none}
+
+.stepper{display:flex;align-items:center;gap:12px;margin-top:10px}
+.stepper button{width:44px;height:44px;border-radius:11px;background:var(--paper);font-size:1.3rem}
+.stepper .v{font-size:1.7rem;min-width:56px;text-align:center}
+
 .toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);z-index:90;
   background:rgba(23,50,63,.94);color:#fff;padding:11px 20px;border-radius:11px;
   font-size:.9rem;opacity:0;transition:opacity .22s;pointer-events:none;max-width:80%}
@@ -213,6 +258,7 @@ input,textarea,select{font:inherit;color:inherit}
 </nav>
 
 <div id="review" class="hidden"><div class="inner"></div></div>
+<div id="rankPane" class="hidden"><div class="inner"></div></div>
 <div id="aiPane" class="hidden"><div class="inner"></div></div>
 <div class="toast" id="toast"></div>
 
@@ -270,26 +316,54 @@ const TYPENAME = {cloze:'挖空', qa:'问答', points:'采分点'};
 
 function blankCard(){
   return {id: Date.now().toString(36)+Math.random().toString(36).slice(2,7),
-    type:'cloze', subject:SUBJECTS[0], tags:[], front:'', back:'', points:[],
-    image:'', created:Date.now(), due:Date.now(), interval:0, ease:2.5,
-    reps:0, lapses:0, errorType:null, history:[]};
+    type:'points', subject:SUBJECTS[0], tags:[], front:'', back:'', points:[''],
+    hint:'', image:'', created:Date.now(), due:Date.now(), interval:0, ease:2.5,
+    reps:0, lapses:0, step:0, errorType:null, history:[]};
 }
+
+/* ---- 复习策略：三档遗忘曲线 ---- */
+const EBB = [5*MIN, 30*MIN, 12*60*MIN, DAY, 2*DAY, 4*DAY, 7*DAY, 15*DAY, 30*DAY, 60*DAY];
+const STRATS = {
+  ebb : {n:'艾宾浩斯',
+         d:'固定阶梯：5 分 → 30 分 → 12 时 → 1 天 → 2 天 → 4 天 → 7 天 → 15 天 → 30 天 → 60 天。记得就往前走一格，模糊原地踏步，忘了退回第一格。新东西刚上手时最有效，代价是头两天要多刷几遍。'},
+  sm2 : {n:'标准',
+         d:'每道题记自己的难易度，记得就指数拉长：1 → 3 → 8 → 20 天……难题自动来得勤，简单题自动往后躲。日常推进用这个。'},
+  slow: {n:'宽松',
+         d:'间隔比标准再拉长约六成，每天要做的题明显变少。题库太大做不完、或者临考只想把重点滚一遍时用。'}
+};
+const strat = ()=> localStorage.getItem('bs_strat') || 'sm2';
 
 // grade: 0 忘了 / 1 模糊 / 2 记得
 function schedule(card, g){
   const now = Date.now(), c = Object.assign({}, card);
-  c.reps = c.reps||0; c.lapses = c.lapses||0; c.ease = c.ease||2.5; c.interval = c.interval||0;
-  if(g===0){
-    c.lapses++; c.ease = Math.max(1.3, c.ease-0.2);
-    c.reps = 0; c.interval = 0; c.due = now + 10*MIN;      // 当天再来一次
-  }else if(g===1){
-    c.ease = Math.max(1.3, c.ease-0.15);
-    c.interval = c.interval<1 ? 1 : Math.max(1, Math.round(c.interval*1.2));
-    c.reps++; c.due = now + c.interval*DAY;
+  c.reps = c.reps||0; c.lapses = c.lapses||0; c.ease = c.ease||2.5;
+  c.interval = c.interval||0; c.step = c.step||0;
+  const st = strat();
+
+  if(st==='ebb'){
+    if(g===0){ c.lapses++; c.step = 0; c.reps = 0; }
+    else if(g===2){ c.step = Math.min(EBB.length-1, c.step+1); c.reps++; }
+    else { c.reps++; }                                   // 模糊：原地踏步
+    const ms = EBB[c.step];
+    c.due = now + ms;
+    c.interval = ms/DAY;
   }else{
-    c.ease = Math.min(3.0, c.ease+0.05);
-    c.interval = c.reps===0 ? 1 : c.reps===1 ? 3 : Math.round(c.interval*c.ease);
-    c.reps++; c.due = now + c.interval*DAY;
+    const slow = st==='slow';
+    if(g===0){
+      c.lapses++; c.ease = Math.max(1.3, c.ease-0.2);
+      c.reps = 0; c.interval = 0; c.due = now + 10*MIN;   // 当天再来一次
+    }else if(g===1){
+      c.ease = Math.max(1.3, c.ease-0.15);
+      c.interval = c.interval<1 ? 1 : Math.max(1, Math.round(c.interval*(slow?1.5:1.2)));
+      c.reps++; c.due = now + c.interval*DAY;
+    }else{
+      c.ease = Math.min(3.0, c.ease+0.05);
+      c.interval = c.reps===0 ? (slow?2:1)
+                 : c.reps===1 ? (slow?5:3)
+                 : Math.round(c.interval*c.ease*(slow?1.25:1));
+      c.interval = Math.max(1, c.interval);
+      c.reps++; c.due = now + c.interval*DAY;
+    }
   }
   c.history = (c.history||[]).concat([{t:now,g:g}]).slice(-40);
   c.lastReview = now;
@@ -339,6 +413,14 @@ function dueText(c){
   return d<1 ? '今天稍后' : d===1 ? '明天' : d<30 ? d+' 天后' : (d/30).toFixed(1)+' 个月后';
 }
 
+// 「今天」从凌晨 0 点算起
+function dayStart(t){ const d = t?new Date(t):new Date();
+  return new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime(); }
+function dkey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')
+                       +'-'+String(d.getDate()).padStart(2,'0'); }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){
+  const j = Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+
 /* =======================================================================
    3. 全局状态
    ======================================================================= */
@@ -372,6 +454,213 @@ async function removeCard(id){
 }
 
 /* =======================================================================
+   3.5 段位 —— 每天达标 +1 颗星，三颗星升一小段，四小段升一大段
+   ======================================================================= */
+const TIERS = [
+  {k:'青铜', c:['#CE9463','#75431D'], a:'#F3D0AA'},
+  {k:'白银', c:['#DCE6EC','#7C929F'], a:'#FFFFFF'},
+  {k:'黄金', c:['#F5D264','#A9740B'], a:'#FFF4C8'},
+  {k:'铂金', c:['#8FE9DB','#207F74'], a:'#E2FFFA'},
+  {k:'钻石', c:['#A9C8FF','#2F52BE'], a:'#E8F0FF'},
+  {k:'最强王者', c:['#F0D588','#8B4FC9'], a:'#FFF6D6'}
+];
+const DIVN = ['Ⅳ','Ⅲ','Ⅱ','Ⅰ'];
+const KING = 5;
+const GOAL_DEFAULT = 20;
+
+let _svgN = 0;
+function rankSVG(t, size){
+  const T = TIERS[Math.max(0,Math.min(KING,t))];
+  const id = 'r'+(++_svgN);
+  const king = t===KING;
+  const top = king ? 30 : 17;      // 盾牌顶边
+  const in1 = king ? 40 : 28;      // 内框顶边
+  const wh = size ? ` width="${size}" height="${size}"` : '';
+  return `<svg viewBox="0 0 120 120"${wh} xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="${id}a" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${T.c[0]}"/><stop offset="100%" stop-color="${T.c[1]}"/></linearGradient>
+    <linearGradient id="${id}b" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${T.c[1]}"/><stop offset="100%" stop-color="${T.c[0]}"/></linearGradient>
+  </defs>
+  <g fill="url(#${id}b)" opacity=".95">
+    <path d="M32 44 L4 31 L11 41 L31 50 Z"/>
+    <path d="M31 52 L2 45 L9 55 L30 59 Z"/>
+    <path d="M30 60 L7 61 L14 70 L29 68 Z"/>
+    <path d="M88 44 L116 31 L109 41 L89 50 Z"/>
+    <path d="M89 52 L118 45 L111 55 L90 59 Z"/>
+    <path d="M90 60 L113 61 L106 70 L91 68 Z"/>
+  </g>
+  ${king?`<path d="M60 3 L71 17 L84 7 L80 28 L40 28 L36 7 L49 17 Z"
+      fill="url(#${id}a)" stroke="${T.c[1]}" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="60" cy="11" r="3" fill="${T.a}"/>`:''}
+  <path d="M60 ${top} L95 ${top+13} V62 C95 85 79 99 60 109 C41 99 25 85 25 62 V${top+13} Z"
+    fill="url(#${id}a)" stroke="${T.c[1]}" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M60 ${in1} L87 ${in1+10} V62 C87 80 74 92 60 100 C46 92 33 80 33 62 V${in1+10} Z"
+    fill="none" stroke="${T.a}" stroke-width="1.7" opacity=".7"/>
+  <path d="M60 46 L79 60 L60 75 L41 60 Z" fill="${T.a}" opacity=".93"/>
+  <path d="M60 55 L70 60.5 L60 66.5 L50 60.5 Z" fill="${T.c[1]}"/>
+  </svg>`;
+}
+function starSVG(on){
+  return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path
+    d="M12 1.5 L15.2 8.8 L22.5 12 L15.2 15.2 L12 22.5 L8.8 15.2 L1.5 12 L8.8 8.8 Z"
+    fill="${on?'var(--gold)':'none'}" stroke="${on?'var(--gold)':'#C3CDD4'}"
+    stroke-width="1.7" stroke-linejoin="round"/></svg>`;
+}
+
+const RK = {
+  get(){ let r=null; try{ r = JSON.parse(localStorage.getItem('bs_rank')||'null'); }catch(e){}
+         return r || {tier:0, div:0, stars:0, pts:0, start:null, log:{}}; },
+  set(r){ localStorage.setItem('bs_rank', JSON.stringify(r)); },
+  goal(){ const v = parseInt(localStorage.getItem('bs_goal')||'',10);
+          return (v>0 && v<=200) ? v : GOAL_DEFAULT; },
+  setGoal(v){ localStorage.setItem('bs_goal', String(Math.max(1,Math.min(200,v)))); }
+};
+
+const rankName = r => r.tier===KING ? '最强王者' : TIERS[r.tier].k+' '+DIVN[r.div];
+
+// 每天复习了多少题（从各卡的 history 里数）
+function dayCounts(){
+  const m = {};
+  S.cards.forEach(c=>(c.history||[]).forEach(h=>{
+    const k = dkey(new Date(h.t)); m[k] = (m[k]||0)+1; }));
+  return m;
+}
+const doneToday = ()=> (dayCounts()[dkey(new Date())] || 0);
+
+function rankUp(r){
+  if(r.tier===KING){ r.pts += 10; return; }
+  r.stars++;
+  if(r.stars>=3){ r.stars = 0; r.div++; }
+  if(r.div>3){ r.div = 0; r.tier++; }
+  if(r.tier>KING){ r.tier = KING; r.div = 0; r.stars = 0; }
+}
+function rankDown(r){
+  if(r.tier===KING){ r.pts = Math.max(0, r.pts-10); return; }
+  r.stars--;
+  if(r.stars<0){
+    if(r.div>0){ r.div--; r.stars = 2; }
+    else if(r.tier>0){ r.tier--; r.div = 3; r.stars = 2; }
+    else { r.stars = 0; }          // 青铜Ⅳ 是地板，不再往下掉
+  }
+}
+
+/* 结算：从开始用的那天算到今天。
+   达标 +1 星（王者 +10 分）／一题没做 −1 星（王者 −10 分）／做了没达标 不加不扣。
+   今天只加不扣，天还没过完。 */
+function settleRank(){
+  const r = RK.get(), goal = RK.goal(), cnt = dayCounts(), today = dkey(new Date());
+  const before = rankName(r)+r.stars+r.pts;
+  if(!r.start) r.start = today;
+  const d = new Date(r.start.replace(/-/g,'/'));
+  for(let guard=0; guard<400; guard++){
+    const k = dkey(d), isToday = (k===today);
+    if(k > today) break;
+    if(!r.log[k]){
+      const n = cnt[k] || 0;
+      if(n >= goal){ r.log[k] = 'd'; rankUp(r); }
+      else if(!isToday){ r.log[k] = n===0 ? 'm' : 'h'; if(n===0) rankDown(r); }
+    }
+    if(isToday) break;
+    d.setDate(d.getDate()+1);
+  }
+  RK.set(r);
+  if(rankName(r)+r.stars+r.pts !== before) return r;
+  return r;
+}
+
+function rankCardHTML(){
+  const r = RK.get(), goal = RK.goal(), n = doneToday();
+  const left = Math.max(0, goal-n);
+  return `<div class="rankcard" id="rankGo">
+    <span class="em">${rankSVG(r.tier, 62)}</span>
+    <span class="tx">
+      <span class="tier">${rankName(r)}${r.tier===KING?` · <span class="num">${r.pts}</span> 分`:''}</span>
+      <span class="sub">今天 <b class="num">${n}</b>/${goal} 题${
+        left===0 ? ' · 今天这颗星拿到了' : ` · 再 ${left} 题就 +1 颗星`}</span>
+      ${r.tier===KING ? '' : `<span class="stars">${[0,1,2].map(i=>starSVG(i<r.stars)).join('')}</span>`}
+    </span>
+    <span class="go">›</span>
+  </div>`;
+}
+
+function openRank(){ $('#rankPane').classList.remove('hidden');
+  document.body.style.overflow='hidden'; renderRank(); }
+function closeRank(){ $('#rankPane').classList.add('hidden');
+  document.body.style.overflow=''; render(); }
+
+function renderRank(){
+  const r = settleRank(), goal = RK.goal(), n = doneToday();
+  const king = r.tier===KING;
+
+  // 最近 28 天的打卡
+  const days = [];
+  for(let i=27;i>=0;i--){ const d = new Date(); d.setDate(d.getDate()-i);
+    const k = dkey(d); days.push({k:k, s:r.log[k]||''}); }
+
+  $('#rankPane .inner').innerHTML = `
+  <div class="rtop" style="margin-bottom:14px">
+    <span class="crumb" style="font-size:.95rem;color:var(--ink)">段位</span>
+    <button id="rkClose">收起</button>
+  </div>
+
+  <div class="bigem">${rankSVG(r.tier, 186)}</div>
+  <div class="bigname">${rankName(r)}</div>
+  ${king
+    ? `<div class="kingpts"><span class="v num">${r.pts}</span><div class="muted">分</div></div>
+       <div class="bigsub">到了王者就不看星星了：达标一天 +10 分，缺一天 −10 分。</div>`
+    : `<div class="bigstars">${[0,1,2].map(i=>starSVG(i<r.stars)).join('')}</div>
+       <div class="bigsub">再 ${3-r.stars} 颗星升到 ${nextName(r)}</div>`}
+
+  <div class="card" style="margin-top:20px">
+    <span class="eyebrow">今天</span>
+    <div style="font-size:1.05rem;margin-top:4px">
+      已复习 <span class="num">${n}</span> / ${goal} 题${n>=goal?'　✓ 达标':''}</div>
+    <div class="pbar" style="margin:10px 0 0"><i style="width:${Math.min(100,Math.round(n/goal*100))}%"></i></div>
+    <span class="eyebrow" style="margin-top:18px">每天做多少题算达标</span>
+    <div class="stepper">
+      <button data-goal="-5">−</button>
+      <span class="v num" id="goalV">${goal}</span>
+      <button data-goal="5">＋</button>
+      <span class="muted" style="flex:1">题</span>
+    </div>
+    <span class="tip">改小一点更容易连上，改大一点升得快。改动只影响以后，已经结算过的日子不会重算。</span>
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">最近 28 天</span>
+    <div class="logrow">${days.map(d=>`<i class="${d.s}"></i>`).join('')}</div>
+    <div class="lgd">
+      <span><s style="background:var(--pine)"></s>达标 +1 星</span>
+      <span><s style="background:var(--gold)"></s>做了没达标 不加不扣</span>
+      <span><s style="background:#D9B4AC"></s>一题没做 −1 星</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">段位阶梯</span>
+    <div class="ladder" style="margin-top:10px">
+      ${TIERS.map((T,i)=>`<span class="lv ${i===r.tier?'on':''}">${rankSVG(i,0)}<b>${T.k}</b></span>`).join('')}
+    </div>
+    <div class="muted" style="margin-top:14px;line-height:1.8">
+      青铜到钻石，每段分 Ⅳ Ⅲ Ⅱ Ⅰ 四小段，每小段三颗星。<br>
+      达标一天 +1 颗星，攒满三颗自动升一小段；一题没做的日子 −1 颗星，星星扣光就掉一小段。<br>
+      青铜 Ⅳ 是地板，最差也就停在那儿。从头爬到最强王者要 60 天达标。
+    </div>
+  </div>`;
+
+  $('#rkClose').onclick = closeRank;
+  $('#rankPane').querySelectorAll('[data-goal]').forEach(b=> b.onclick = ()=>{
+    RK.setGoal(RK.goal() + (+b.dataset.goal)); renderRank(); });
+}
+function nextName(r){
+  const t = {tier:r.tier, div:r.div, stars:2, pts:0};
+  rankUp(t);
+  return t.tier===KING ? '最强王者' : TIERS[t.tier].k+' '+DIVN[t.div];
+}
+
+/* =======================================================================
    4. 各页面渲染
    ======================================================================= */
 function render(){
@@ -402,6 +691,8 @@ function vToday(){
   else if(q.length>40)  hint = `共 ${S.cards.length} 题。队列有点长，做完前 20 题也算数。`;
   else                  hint = `题库共 ${S.cards.length} 题。`;
 
+  const goal = RK.goal();
+
   app().innerHTML = `
   <div class="hero">
     <span class="eyebrow">${now.getMonth()+1} 月 ${now.getDate()} 日</span>
@@ -409,7 +700,8 @@ function vToday(){
     <div class="muted">${hint}</div>
   </div>
   ${total ? `<div class="pbar"><i style="width:${Math.round(done/total*100)}%"></i></div>
-             <div class="muted" style="margin:0 4px 14px">今天已复习 ${done} 题</div>` : '<div style="height:14px"></div>'}
+             <div class="muted" style="margin:0 4px 14px">今天已复习 ${done} 题 · 今日目标 ${goal} 题</div>` : '<div style="height:14px"></div>'}
+  ${rankCardHTML()}
   ${q.length
     ? `<button class="btn" id="start">开始复习</button>`
     : `<div class="card"><b>今天的队列清空了</b><div class="muted" style="margin-top:4px">
@@ -426,11 +718,12 @@ function vToday(){
   </div>`;
 
   const s = $('#start'); if(s) s.onclick = ()=>startReview();
+  const rg = $('#rankGo'); if(rg) rg.onclick = openRank;
   app().querySelectorAll('[data-go]').forEach(b=> b.onclick = ()=>{ S.tab=b.dataset.go; render(); });
 }
 
 /* ---------- 复习 ---------- */
-const R = {queue:[], i:0, card:null, segs:[], revealed:false, checked:[], sum:[0,0,0]};
+const R = {queue:[], i:0, card:null, segs:[], revealed:false, hinted:false, checked:[], sum:[0,0,0]};
 
 function startReview(){
   R.queue = buildQueue(S.cards); R.i = 0; R.sum = [0,0,0];
@@ -449,7 +742,7 @@ function loadCard(){
   if(R.i >= R.queue.length){ renderDone(); return; }
   R.card = R.queue[R.i];
   R.segs = R.card.type==='cloze' ? parseCloze(R.card.front) : [];
-  R.revealed = false;
+  R.revealed = false; R.hinted = false;
   R.checked = (R.card.points||[]).map(()=>false);
   renderReview();
 }
@@ -469,9 +762,9 @@ async function renderReview(){
   }else{
     bodyHTML = `<div class="qtext">${esc(c.front)}</div>` + (R.revealed
       ? `<div class="pts"><span class="eyebrow">答对哪几点，就点亮哪几点</span>
-          ${c.points.map((p,i)=>`<div class="pt${R.checked[i]?' on':''}" data-pt="${i}">
+          ${(c.points||[]).map((p,i)=>`<div class="pt${R.checked[i]?' on':''}" data-pt="${i}">
              <span class="box">✓</span><span class="t">${esc(p)}</span></div>`).join('')}
-          <div class="muted" style="margin-top:9px">命中 ${R.checked.filter(Boolean).length} / ${c.points.length}</div></div>`
+          <div class="muted" style="margin-top:9px">命中 ${R.checked.filter(Boolean).length} / ${(c.points||[]).length}</div></div>`
       : `<div class="muted" style="margin-top:14px">先自己在心里（或嘴上）答一遍，再对采分点。</div>`);
   }
 
@@ -484,7 +777,10 @@ async function renderReview(){
       <button id="rClose">收起</button>
     </div>
     <div class="rprog"><i style="width:${Math.round(R.i/R.queue.length*100)}%"></i></div>
-    <div class="stage">${imgSrc?`<img src="${imgSrc}" id="rImg">`:''}${bodyHTML}</div>
+    <div class="stage">${imgSrc?`<img src="${imgSrc}" id="rImg">`:''}${bodyHTML}
+      ${(c.hint||'').trim() ? (R.hinted
+        ? `<div class="hintbox"><span class="eyebrow">提示</span>${esc(c.hint)}</div>`
+        : `<button class="hintbtn" id="rHint">给点提示</button>`) : ''}</div>
     ${R.revealed ? `<div class="grades">
         ${[['忘了',0],['模糊',1],['记得',2]].map(([t,g])=>
           `<button class="g${g}" data-g="${g}"><span class="g-t">${t}</span>
@@ -500,6 +796,7 @@ async function renderReview(){
 
   const rv = $('#rReveal');
   if(rv) rv.onclick = ()=>{ R.revealed = true; R.segs.forEach(s=>s.open=true); renderReview(); };
+  const rh = $('#rHint'); if(rh) rh.onclick = ()=>{ R.hinted = true; renderReview(); };
   $('#rClose').onclick = closeReview;
   $('#rEdit').onclick  = ()=>{ closeReview(); openEdit(c.id); };
   $('#rSpeak').onclick = ()=>{ speakOne(c); };
@@ -513,6 +810,11 @@ async function doGrade(g){
   if(g===2) up.errorType = null;
   await saveCard(up);
   R.sum[g]++;
+  const was = RK.get(); const wasName = rankName(was), wasStars = was.stars, wasPts = was.pts;
+  const now2 = settleRank();
+  if(rankName(now2)!==wasName) toast('升段了 · '+rankName(now2));
+  else if(now2.stars>wasStars || now2.pts>wasPts)
+    toast(now2.tier===KING ? '今天达标 · +10 分' : '今天达标 · +1 颗星');
   if(g===0) R.queue.push(up);          // 当天队尾再来一次
 
   if(g<2){ askError(up); }
@@ -534,20 +836,36 @@ function askError(card){
 }
 
 function renderDone(){
+  const r = RK.get(), goal = RK.goal(), n = doneToday();
+  const hit = n >= goal;
   $('#review .inner').innerHTML = `<div class="done">
     <span class="eyebrow">这一轮</span>
     <span class="n num">${R.queue.length}</span>
     <div style="font-size:1.1rem;margin-bottom:8px">题过完了</div>
     <div class="muted">记得 ${R.sum[2]} · 模糊 ${R.sum[1]} · 忘了 ${R.sum[0]}</div>
     <div class="muted" style="margin-top:4px">标「忘了」的题今天还会再出现一次。</div>
-    <button class="btn" id="dBack" style="margin-top:34px">回到今日</button></div>`;
+    <div class="card" style="margin-top:26px;text-align:left">
+      <div style="display:flex;align-items:center;gap:13px">
+        <span style="width:52px;flex-shrink:0;line-height:0">${rankSVG(r.tier,52)}</span>
+        <span style="flex:1">
+          <b>${rankName(r)}</b>
+          <div class="muted" style="margin-top:2px">${hit
+            ? '今天达标了，这颗星到手。'
+            : `今天 ${n}/${goal} 题，再做 ${goal-n} 题就 +1 颗星。`}</div>
+          ${r.tier===KING?`<div class="muted num" style="margin-top:4px">${r.pts} 分</div>`
+            :`<span class="stars">${[0,1,2].map(i=>starSVG(i<r.stars)).join('')}</span>`}
+        </span>
+      </div>
+    </div>
+    <button class="btn" id="dBack" style="margin-top:14px">回到今日</button></div>`;
   $('#dBack').onclick = closeReview;
 }
 
 /* =======================================================================
    5. 听背 —— 系统语音合成，通勤用
    ======================================================================= */
-const L = {queue:null, i:0, playing:false, gap:3, mode:'both', stop:false};
+const L = {queue:null, i:0, playing:false, gap:3, mode:'both', stop:false,
+           order:'seq', scope:'due', waiting:false, resume:null};
 
 function voiceFor(){
   const vs = speechSynthesis.getVoices().filter(v=>/^zh/i.test(v.lang));
@@ -577,27 +895,44 @@ function speakOne(c){
   speak(frontSpeech(c)).then(()=>wait(600)).then(()=>speak(backSpeech(c)));
 }
 
+function buildListenQueue(){
+  const due = buildQueue(S.cards);
+  let list = (L.scope==='all' || !due.length)
+    ? S.cards.slice().sort((a,b)=>(a.due||0)-(b.due||0))
+    : due;
+  if(L.order==='rand') list = shuffle(list.slice());
+  return list;
+}
 function ensureListenQueue(){
   if(L.queue) return;
-  const q = buildQueue(S.cards);
-  L.queue = q.length ? q : S.cards.slice().sort((a,b)=>(a.due||0)-(b.due||0));
-  L.i = 0;
+  L.queue = buildListenQueue(); L.i = 0;
+}
+function reshuffleListen(){
+  stopListen();
+  L.queue = buildListenQueue(); L.i = 0;
+  vListen();
 }
 
 function vListen(){
   ensureListenQueue();
   const c = L.queue[L.i];
+  const manual = L.gap===0;
 
   app().innerHTML = `
   <div class="hero" style="padding-bottom:0">
     <span class="eyebrow">听背</span>
-    <div class="muted">读题 → 停 ${L.gap} 秒让你想 → 读答案 → 下一题。走路、坐车、做家务的时候用。</div>
+    <div class="muted">${manual
+      ? '读题 → 停住等你点「继续」 → 读答案 → 再等你点。想多久想多久，不会自己往下跑。'
+      : `读题 → 停 ${L.gap} 秒让你想 → 读答案 → 下一题。走路、坐车、做家务的时候用。`}</div>
   </div>
   ${!L.queue.length ? `<div class="card" style="margin-top:16px">题库是空的，先去录几道题。</div>` : `
   <div class="card lsn">
-    <span class="eyebrow">${L.i+1} / ${L.queue.length} · ${c?c.subject:''}</span>
+    <span class="eyebrow">${L.i+1} / ${L.queue.length} · ${c?c.subject:''}${L.order==='rand'?' · 随机':''}</span>
     <div class="now" id="lNow">${c?esc(summary(c,60)):''}</div>
-    <button class="play${L.playing?' on':''}" id="lPlay">${L.playing?'❚❚':'▶'}</button>
+    ${L.waiting
+      ? `<button class="play on" id="lGo">▶</button>
+         <div class="muted" style="margin:-6px 0 8px">想好了点一下，继续往下读</div>`
+      : `<button class="play${L.playing?' on':''}" id="lPlay">${L.playing?'❚❚':'▶'}</button>`}
     <div class="ctl">
       <button id="lPrev">上一题</button>
       <button id="lMiss">这题没记住</button>
@@ -605,20 +940,41 @@ function vListen(){
     </div>
   </div>
   <div class="card">
-    <span class="eyebrow">读什么</span>
+    <span class="eyebrow">按什么顺序</span>
+    <div class="seg">
+      <button data-ord="seq" class="${L.order==='seq'?'on':''}">按到期先后</button>
+      <button data-ord="rand" class="${L.order==='rand'?'on':''}">随机</button>
+    </div>
+    ${L.order==='rand'?`<button class="tool" id="lShuffle">重新洗一次</button>`:''}
+
+    <span class="eyebrow" style="margin-top:16px">听哪些题</span>
+    <div class="seg">
+      <button data-sc="due" class="${L.scope==='due'?'on':''}">今天到期的</button>
+      <button data-sc="all" class="${L.scope==='all'?'on':''}">整个题库</button>
+    </div>
+
+    <span class="eyebrow" style="margin-top:16px">读什么</span>
     <div class="seg">
       <button data-m="both" class="${L.mode==='both'?'on':''}">题目 + 答案</button>
       <button data-m="front" class="${L.mode==='front'?'on':''}">只读题目</button>
     </div>
-    <span class="eyebrow" style="margin-top:14px">中间停多久</span>
+
+    <span class="eyebrow" style="margin-top:16px">中间停多久</span>
     <div class="seg">
       ${[2,3,5,8].map(g=>`<button data-gap="${g}" class="${L.gap===g?'on':''}">${g} 秒</button>`).join('')}
+      <button data-gap="0" class="${manual?'on':''}">不自动</button>
     </div>
+    <div class="tip">${manual
+      ? '「不自动」= 停下来等你点「继续」。答案长、想的时间不好估的时候用这个，比来回按暂停省事。'
+      : '想的时间不够就选「不自动」，它会停在那儿等你点继续。'}</div>
     <div class="tip">屏幕锁上后 iOS 会暂停朗读。想放兜里听，先把「设置 → 显示与亮度 → 自动锁定」调成「永不」。</div>
   </div>`}`;
 
-  const pl = $('#lPlay'); if(!pl) return;
-  pl.onclick  = ()=> L.playing ? stopListen() : startListen();
+  const go = $('#lGo');
+  if(go) go.onclick = ()=>{ if(L.resume){ const r = L.resume; L.resume = null; r(); } };
+  const pl = $('#lPlay');
+  if(pl) pl.onclick = ()=> L.playing ? stopListen() : startListen();
+  if(!$('#lPrev')) return;
   $('#lPrev').onclick = ()=>{ jump(-1); };
   $('#lNext').onclick = ()=>{ jump(1); };
   $('#lMiss').onclick = async ()=>{
@@ -628,6 +984,11 @@ function vListen(){
   };
   app().querySelectorAll('[data-m]').forEach(b=> b.onclick = ()=>{ L.mode=b.dataset.m; vListen(); });
   app().querySelectorAll('[data-gap]').forEach(b=> b.onclick = ()=>{ L.gap=+b.dataset.gap; vListen(); });
+  app().querySelectorAll('[data-ord]').forEach(b=> b.onclick = ()=>{
+    if(L.order===b.dataset.ord) return; L.order = b.dataset.ord; reshuffleListen(); });
+  app().querySelectorAll('[data-sc]').forEach(b=> b.onclick = ()=>{
+    if(L.scope===b.dataset.sc) return; L.scope = b.dataset.sc; reshuffleListen(); });
+  const sh = $('#lShuffle'); if(sh) sh.onclick = reshuffleListen;
 }
 
 function jump(d){
@@ -635,25 +996,46 @@ function jump(d){
   L.i = Math.max(0, Math.min(L.queue.length-1, L.i+d));
   vListen();
 }
-function stopListen(){ L.stop = true; L.playing = false; speechSynthesis.cancel(); vListen(); }
+function stopListen(){
+  L.stop = true; L.playing = false; speechSynthesis.cancel();
+  if(L.resume){ const r = L.resume; L.resume = null; r(); }
+  L.waiting = false;
+  vListen();
+}
+
+// 停顿：秒数到就走；选了「不自动」就停在这儿，等点「继续」
+function gapWait(){
+  if(L.gap > 0) return wait(L.gap*1000);
+  L.waiting = true; vListen();
+  return new Promise(r=>{ L.resume = r; }).then(()=>{
+    L.waiting = false; L.resume = null;
+    if(!L.stop) vListen();
+  });
+}
 
 async function startListen(){
-  L.stop = false; L.playing = true; vListen();
+  L.stop = false; L.playing = true; L.waiting = false; vListen();
+  const setNow = t=>{ const el = $('#lNow'); if(el) el.textContent = t; };
+
   while(!L.stop && L.i < L.queue.length){
     const c = L.queue[L.i];
-    const el = $('#lNow'); if(el) el.textContent = plain(c.front);
+    setNow(plain(c.front));
     await speak(frontSpeech(c));
     if(L.stop) break;
-    if(L.mode==='both'){
-      await wait(L.gap*1000);
-      if(L.stop) break;
-      const b = backSpeech(c);
-      if(b){ const e2 = $('#lNow'); if(e2) e2.textContent = b; await speak(b); }
-    }else{
-      await wait(L.gap*1000);
-    }
+
+    await gapWait();
     if(L.stop) break;
-    await wait(700);
+
+    if(L.mode==='both'){
+      const b = backSpeech(c);
+      if(b){ setNow(b); await speak(b); }
+      if(L.stop) break;
+      if(L.gap===0){ await gapWait(); if(L.stop) break; }
+      else await wait(700);
+    }else if(L.gap>0){
+      await wait(700);
+    }
+
     L.i++;
     if(L.i < L.queue.length) vListen();
   }
@@ -668,9 +1050,6 @@ const PH = {
   qa    : '例：简述新文化运动的主要内容。',
   points: '例：简述中学常用的教学原则。'
 };
-const TYPEDEF = [['cloze','挖空复述','盖住关键词，自己补'],
-                 ['qa','问答','看题目，说答案'],
-                 ['points','采分点','主观题逐条对勾']];
 
 function openEdit(id){
   const c = S.cards.find(x=>x.id===id);
@@ -684,26 +1063,26 @@ async function vAdd(){
   const d = S.draft;
   const imgSrc = d.image ? await imgURLFor(d.image) : '';
 
+  const legacy = d.type !== 'points';       // 以前录的挖空 / 问答卡
+
   app().innerHTML = `
   <button class="aibig${AIcfg.ok()?'':' off'}" id="goAI">
     ${AIcfg.ok() ? '📷 拍照自动录入' : '📷 拍照自动录入（未设置）'}</button>
-  <div class="card">
-    <span class="eyebrow">怎么考自己</span>
-    <div class="types">${TYPEDEF.map(([k,n,ds])=>
-      `<button data-t="${k}" class="${d.type===k?'on':''}">
-        <span class="tn">${n}</span><span class="td">${ds}</span></button>`).join('')}</div>
-  </div>
+
+  ${legacy ? `<div class="card">
+    <span class="eyebrow">这是一张旧卡</span>
+    <div class="muted" style="margin-top:4px">类型是「${TYPENAME[d.type]}」，照样能复习。
+      新录的题一律走采分点，这张也可以转过来。</div>
+    <button class="tool" id="bConv">转成采分点</button></div>` : ''}
 
   <div class="card">
     <span class="eyebrow">归到哪里</span>
     <select class="input" id="fSub">${SUBJECTS.map(s=>
       `<option${s===d.subject?' selected':''}>${s}</option>`).join('')}</select>
-    <div class="field"><span class="eyebrow">知识点（空格隔开，如：洋务运动 民族工业）</span>
-      <input class="input" id="fTags" value="${esc((d.tags||[]).join(' '))}" placeholder="留空也行"></div>
   </div>
 
   <div class="card">
-    <span class="eyebrow">${d.type==='points'?'题目':'正面'}</span>
+    <span class="eyebrow">题目</span>
     <textarea class="ta" id="fFront" placeholder="${PH[d.type]}">${esc(d.front)}</textarea>
     ${d.type==='cloze' ? `<button class="tool" id="bBrace">插入【】挖空</button>
       <span class="tip">被【】包住的字会被墨块盖掉，复习时点一下才化开。</span>`:''}
@@ -723,6 +1102,14 @@ async function vAdd(){
         <input value="${esc(p)}" data-pi="${i}"><button class="x" data-px="${i}">删</button></div>`).join('')}</div>
     <button class="tool" id="bAddPt">加一条采分点</button></div>`:''}
 
+  <div class="card">
+    <span class="eyebrow">提示（想不起来时点开看）</span>
+    <textarea class="ta" id="fHint" style="min-height:76px"
+      placeholder="例：一共八条，前四条讲怎么教，后四条讲对着谁教。">${esc(d.hint||'')}</textarea>
+    <span class="tip">复习时这段藏在「给点提示」后面，点了才出来。写勾得起记忆的线索就够了 ——
+      时间锚点、口诀、首字、一共几条 —— 别把答案原样抄进去，抄了就没得想了。留空的话按钮不会出现。</span>
+  </div>
+
   <button class="btn" id="bSave">${S.editing?'保存修改':'存进题库'}</button>
   ${S.editing?`<button class="btn danger" id="bDel">删掉这道题</button>
                <button class="btn ghost" id="bCancel">放弃修改</button>`:''}`;
@@ -730,18 +1117,27 @@ async function vAdd(){
   const sync = ()=>{
     d.front = $('#fFront').value;
     d.subject = $('#fSub').value;
-    d.tags = $('#fTags').value.split(/[\s,，、]+/).filter(Boolean);
+    d.hint = $('#fHint').value;
     const b = $('#fBack'); if(b) d.back = b.value;
     app().querySelectorAll('[data-pi]').forEach(inp=> d.points[+inp.dataset.pi] = inp.value);
   };
 
   $('#goAI').onclick = ()=>openAI();
 
-  app().querySelectorAll('[data-t]').forEach(b=> b.onclick = ()=>{
-    sync(); d.type = b.dataset.t;
-    if(d.type==='points' && !d.points.length) d.points = [''];
-    vAdd();
-  });
+  const cv = $('#bConv');
+  if(cv) cv.onclick = ()=>{
+    sync();
+    let pts = [];
+    if(d.type==='qa') pts = (d.back||'').split(/[\n；;。]+/).map(s=>s.trim()).filter(Boolean);
+    else{
+      const m = (d.front||'').match(/【([^】]*)】/g);
+      pts = m ? m.map(x=>x.replace(/[【】]/g,'')) : [];
+      d.front = plain(d.front);
+    }
+    d.points = pts.length ? pts : [''];
+    d.type = 'points'; d.back = '';
+    vAdd(); toast('转好了，检查一下采分点');
+  };
 
   const br = $('#bBrace');
   if(br) br.onclick = ()=>{
@@ -773,7 +1169,8 @@ async function vAdd(){
 
   $('#bSave').onclick = async ()=>{
     sync();
-    if(d.type==='points') d.points = d.points.filter(p=>p&&p.trim());
+    if(d.type==='points') d.points = (d.points||[]).filter(p=>p&&p.trim());
+    d.hint = (d.hint||'').trim();
     if(!d.front.trim() && !d.image) return toast('题干还是空的');
     if(d.type==='cloze'  && d.front.indexOf('【')<0) return toast('还没挖空，用【】包住关键词');
     if(d.type==='qa'     && !d.back.trim())         return toast('答案还是空的');
@@ -821,6 +1218,8 @@ function vList(){
   <input class="input" id="fKw" style="margin:0 0 12px" placeholder="搜题干或知识点" value="${esc(S.kw)}">
   <div id="filters">
     <span class="chip ${S.filter==='all'?'on':''}" data-f="all">全部 ${S.cards.length}</span>
+    <span class="chip ${S.filter==='new'?'on':''}" data-f="new">今日录入 ${
+      S.cards.filter(c=>(c.created||0)>=dayStart()).length}</span>
     <span class="chip ${S.filter==='due'?'on':''}" data-f="due">待复习</span>
     <span class="chip ${S.filter==='weak'?'on':''}" data-f="weak">老是错</span>
     ${SUBJECTS.map(s=>`<span class="chip ${S.filter===s?'on':''}" data-f="${s}">${s}</span>`).join('')}
@@ -842,29 +1241,36 @@ function vList(){
 }
 
 function renderListBody(){
-  const now = Date.now();
+  const now = Date.now(), t0 = dayStart();
+  const fresh = S.filter==='new';
   let l = S.cards;
-  if(S.filter==='due')       l = l.filter(c=>isDue(c,now));
+  if(fresh)                  l = l.filter(c=>(c.created||0)>=t0);
+  else if(S.filter==='due')  l = l.filter(c=>isDue(c,now));
   else if(S.filter==='weak') l = l.filter(c=>(c.lapses||0)>=2);
   else if(S.filter!=='all')  l = l.filter(c=>c.subject===S.filter);
   if(S.kw){
     const k = S.kw.trim();
-    l = l.filter(c=>(plain(c.front)+' '+(c.back||'')+' '+(c.tags||[]).join(' ')+' '+(c.points||[]).join(' ')).indexOf(k)>=0);
+    l = l.filter(c=>(plain(c.front)+' '+(c.back||'')+' '+(c.hint||'')+' '
+                     +(c.tags||[]).join(' ')+' '+(c.points||[]).join(' ')).indexOf(k)>=0);
   }
-  l = l.slice().sort((a,b)=>(a.due||0)-(b.due||0)).slice(0,400);
+  l = l.slice().sort(fresh ? (a,b)=>(b.created||0)-(a.created||0)
+                           : (a,b)=>(a.due||0)-(b.due||0)).slice(0,400);
 
   $('#listBody').innerHTML = `
+  ${fresh && l.length ? `<div class="muted" style="margin:0 4px 10px">今天录了 ${l.length} 题，最新的排在最前。</div>`:''}
   ${l.length ? l.map(c=>`
     <div class="item" data-id="${c.id}">
-      <div class="top"><span class="badge">${TYPENAME[c.type]}</span>
+      <div class="top"><span class="badge">${TYPENAME[c.type]||'采分点'}</span>
         <span>${c.subject}</span><span class="sp"></span>
         <span class="due ${isDue(c,now)?'hot':''}">${dueText(c)}</span></div>
       <div class="tx">${esc(summary(c,44))}${c.aiUnverified?'<span class="unver">未核对</span>':''}</div>
       <div class="meta">${c.lapses?`<span class="lp">忘过 ${c.lapses} 次</span>`:''}
         ${c.errorType?`<span class="et">${c.errorType}</span>`:''}
+        ${(c.hint||'').trim()?`<span style="margin-right:8px">💡 有提示</span>`:''}
         ${(c.tags||[]).map(t=>`<span style="margin-right:8px">${esc(t)}</span>`).join('')}</div>
     </div>`).join('')
-   : `<div class="card muted" style="text-align:center;padding:50px 0">没有符合的题。</div>`}`;
+   : `<div class="card muted" style="text-align:center;padding:50px 0">${
+       fresh ? '今天还没录题。' : '没有符合的题。'}</div>`}`;
 
   $('#listBody').querySelectorAll('.item').forEach(it=> it.onclick = ()=>openEdit(it.dataset.id));
 }
@@ -907,6 +1313,11 @@ async function vStats(){
     }
   }catch(e){}
 
+  const st = strat(), noti = NOTI.get();
+  const notiState = !('Notification' in window) ? 'no'
+                  : Notification.permission==='granted' ? 'ok'
+                  : Notification.permission==='denied' ? 'denied' : 'ask';
+
   app().innerHTML = `
   <div class="grid">
     <div class="cell"><span class="v num">${cards.length}</span><span class="k">题库总量</span></div>
@@ -915,7 +1326,37 @@ async function vStats(){
     <div class="cell"><span class="v num">${streak}</span><span class="k">连续天数</span></div>
   </div>
 
-  ${wk.length?`<div class="card" style="margin-top:14px"><span class="eyebrow">最该回头看的知识点</span>
+  <div style="margin-top:14px">${rankCardHTML()}</div>
+
+  <div class="card">
+    <span class="eyebrow">复习策略</span>
+    <div class="muted">决定「记得 / 模糊 / 忘了」之后下次什么时候再见。换了立刻生效，只影响以后评的题。</div>
+    <div class="seg" style="margin-top:10px">${Object.keys(STRATS).map(k=>
+      `<button data-st="${k}" class="${st===k?'on':''}">${STRATS[k].n}</button>`).join('')}</div>
+    <div class="tip">${STRATS[st].d}</div>
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">到期提醒</span>
+    ${notiState==='no'
+      ? `<div class="muted">这个浏览器不支持通知。把应用装到主屏幕再打开试试。</div>`
+      : notiState==='denied'
+      ? `<div class="muted">系统里把通知关掉了。去「设置 → 通知 → 背书」重新打开。</div>`
+      : notiState==='ask'
+      ? `<div class="muted">开了之后，到点还有题没做完会推一条提醒。</div>
+         <button class="tool" id="ntAsk">开启通知</button>`
+      : `<div class="seg" style="margin-top:8px">
+           <button data-nt="1" class="${noti.on?'on':''}">开</button>
+           <button data-nt="0" class="${noti.on?'':'on'}">关</button>
+         </div>
+         <div class="field"><span class="eyebrow">每天几点提醒</span>
+           <input class="input" type="time" id="ntTime" value="${esc(noti.time||'20:00')}"></div>
+         <button class="tool" id="ntTest">发一条试试</button>`}
+    <span class="tip">说实话：iPhone 上的网页应用只有开着、或者刚打开的时候才推得动。
+      真出门了它多半不会响，别把它当闹钟——每天固定时间自己点开一次更靠谱。</span>
+  </div>
+
+  ${wk.length?`<div class="card" style="margin-top:14px"><span class="eyebrow">最该回头看的</span>
     <div class="muted">按「忘了」的次数排</div>
     ${wk.map(k=>`<div class="row"><span class="nm">${esc(k)}</span>
       <span class="bar"><i style="width:${Math.round(wmap[k]/wmax*100)}%"></i></span>
@@ -948,6 +1389,19 @@ async function vStats(){
   $('#bExpLite').onclick = ()=>doExport(false);
   $('#bImp').onclick     = ()=>$('#fImp').click();
   $('#fImp').onchange    = doImport;
+
+  const rg = $('#rankGo'); if(rg) rg.onclick = openRank;
+  app().querySelectorAll('[data-st]').forEach(b=> b.onclick = ()=>{
+    localStorage.setItem('bs_strat', b.dataset.st); vStats(); toast('换成「'+STRATS[b.dataset.st].n+'」了'); });
+
+  const na = $('#ntAsk'); if(na) na.onclick = askNoti;
+  app().querySelectorAll('[data-nt]').forEach(b=> b.onclick = ()=>{
+    const n = NOTI.get(); n.on = b.dataset.nt==='1'; NOTI.set(n); vStats(); });
+  const nt = $('#ntTime'); if(nt) nt.onchange = ()=>{
+    const n = NOTI.get(); n.time = nt.value || '20:00'; n.lastFired = null; NOTI.set(n); toast('改好了'); };
+  const ntt = $('#ntTest'); if(ntt) ntt.onclick = ()=>{
+    fire('背书', '提醒长这样。今天还有 '+buildQueue(S.cards).length+' 题到期。');
+    toast('发了，没看到就是系统拦了'); };
   app().querySelectorAll('[data-fs]').forEach(b=> b.onclick = ()=>{
     S.fontSize = b.dataset.fs; localStorage.setItem('bs_font', S.fontSize); render(); });
   bindAISettings();
@@ -999,7 +1453,51 @@ async function doImport(e){
 
 
 /* =======================================================================
-   8.5 自动录题 —— 上传截图，模型识别 + 归类 + 挖空建议，你确认后入库
+   8.8 到期提醒 —— 尽力而为：应用开着或刚打开时才推得动
+   ======================================================================= */
+const NOTI = {
+  get(){ try{ return JSON.parse(localStorage.getItem('bs_noti')||'{}'); }catch(e){ return {}; } },
+  set(v){ localStorage.setItem('bs_noti', JSON.stringify(v)); }
+};
+
+async function askNoti(){
+  if(!('Notification' in window)) return toast('这个浏览器不支持通知');
+  let p;
+  try{ p = await Notification.requestPermission(); }catch(e){ p = 'denied'; }
+  if(p==='granted'){ const n = NOTI.get(); n.on = true; n.time = n.time||'20:00'; NOTI.set(n); toast('开好了'); }
+  else toast('系统没给权限');
+  vStats();
+}
+
+async function fire(title, body){
+  try{
+    if(!('Notification' in window) || Notification.permission!=='granted') return;
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+    const opt = {body:body, icon:'icon-192.png', badge:'icon-192.png', tag:'beishu-due', renotify:true};
+    if(reg && reg.showNotification) await reg.showNotification(title, opt);
+    else new Notification(title, opt);
+  }catch(e){}
+}
+
+function checkNoti(){
+  const n = NOTI.get();
+  if(!n.on || !('Notification' in window) || Notification.permission!=='granted') return;
+  const due = buildQueue(S.cards).length;
+  const goal = RK.goal(), n2 = doneToday();
+  if(!due && n2>=goal) return;                        // 没欠账也达标了，不打扰
+  const now = new Date(), today = dkey(now);
+  if(n.lastFired === today) return;
+  const hm = String(n.time||'20:00').split(':');
+  const at = new Date(now); at.setHours(+hm[0]||20, +hm[1]||0, 0, 0);
+  if(now < at) return;
+  n.lastFired = today; NOTI.set(n);
+  fire('该复习了', n2>=goal
+    ? `今天还有 ${due} 题到期。星星已经拿到了，剩下的算加练。`
+    : `今天 ${n2}/${goal} 题，还有 ${due} 题到期。再做 ${goal-n2} 题就 +1 颗星。`);
+}
+
+/* =======================================================================
+   8.5 自动录题 —— 上传截图，模型识别 + 拆采分点，你确认后入库
    ======================================================================= */
 const AI_PRESETS = {
   zhipu : {n:'智谱 GLM（有免费档）', base:'https://open.bigmodel.cn/api/paas/v4/chat/completions',
@@ -1016,14 +1514,14 @@ const AIcfg = {
 };
 
 const AI_PROMPT = `你是备考助手。图片是一道考题的截图。请严格完成：
-1. 逐字识别题干和全部选项，原样保留，不要改写、缩写或补充。
+1. 逐字识别题干（含设问和选项），原样保留，不要改写、缩写或补充，放进 front。
 2. 归类，只能从这个列表选一个：中国古代史/中国近代史/中国现代史/世界古代史/世界近代史/世界现代史/教资科目一/教资科目二
-3. 提炼 1 至 3 个知识点标签，用具体概念名，不要用"历史""选择题"这种空词。
-4. 关于答案：如果截图里本身给出了答案或解析，抄录它，answerVerified 填 true；如果截图里没有答案，你可以给出判断和理由，但 answerVerified 必须填 false。绝不能把自己的推断说成是原文给的。
-5. 再提炼一条"必背表述"放进 cloze，把真正需要精确记忆的词（时间、人名、术语、概念本质）用【】包起来。不要挖无关紧要的字，挖 2 到 4 处为宜。
+3. 把答案拆成"采分点"放进 points 数组：一条一个要点，每条尽量短（十几个字），3 到 8 条为宜，顺序按答题时该说的顺序。
+4. 关于答案：如果截图里本身给出了答案或解析，据此拆分，answerVerified 填 true；如果截图里没有答案，你可以自己作答，但 answerVerified 必须填 false。绝不能把自己的推断说成是原文给的。
+5. 再写一条"提示"放进 hint：想不起来时能勾出记忆的线索——一共几条、时间锚点、口诀、每条的首字、关键人物。不要把采分点原样抄进 hint，抄了就没得想了。
 
 只输出 JSON，不要 markdown 代码块，不要任何解释：
-{"subject":"","tags":[],"front":"","back":"","answerVerified":false,"cloze":""}`;
+{"subject":"","front":"","points":[],"hint":"","answerVerified":false}`;
 
 function pickJSON(txt){
   let t = (txt||'').trim().replace(/^```(json)?/i,'').replace(/```$/,'').trim();
@@ -1109,24 +1607,19 @@ function resHTML(it,i){
     <div class="warn">${esc(it.err)}</div>
     <div class="acts"><button class="drop" data-drop="${i}">移掉</button></div></div>`;
   const d = it.data;
+  const pts = Array.isArray(d.points) ? d.points : String(d.points||'').split(/\n+/);
   return `<div class="res" data-res="${i}">
     ${it.url?`<img src="${it.url}">`:''}
     <span class="lbl">科目</span>
     <select class="fld" data-f="subject">${SUBJECTS.map(x=>
       `<option${x===d.subject?' selected':''}>${x}</option>`).join('')}</select>
-    <span class="lbl">知识点</span>
-    <input class="fld" data-f="tags" value="${esc((d.tags||[]).join(' '))}">
-    <span class="lbl">题干</span>
+    <span class="lbl">题目</span>
     <textarea class="fld" data-f="front">${esc(d.front)}</textarea>
-    <span class="lbl">答案${d.answerVerified?'':'<span class="unver">AI 推断 · 未核对</span>'}</span>
-    <textarea class="fld" data-f="back">${esc(d.back)}</textarea>
-    ${d.answerVerified?'':'<div class="warn">截图里没写答案，这是模型自己判断的。核对过再存，别直接背。</div>'}
-    <span class="lbl">必背表述（【】里的字会被墨块盖住）</span>
-    <textarea class="fld" data-f="cloze">${esc(d.cloze||'')}</textarea>
-    <div class="two">
-      <label><input type="checkbox" data-k="qa" ${it.mkQA!==false?'checked':''}>存原题卡</label>
-      <label><input type="checkbox" data-k="cl" ${it.mkCL!==false?'checked':''}>存挖空卡</label>
-    </div>
+    <span class="lbl">采分点 · 一行一条${d.answerVerified?'':'<span class="unver">AI 推断 · 未核对</span>'}</span>
+    <textarea class="fld" data-f="points" style="min-height:130px">${esc(pts.filter(Boolean).join('\n'))}</textarea>
+    ${d.answerVerified?'':'<div class="warn">截图里没写答案，这是模型自己拆的。核对过再存，别直接背。</div>'}
+    <span class="lbl">提示（复习时点开才看得到）</span>
+    <textarea class="fld" data-f="hint">${esc(d.hint||'')}</textarea>
     <div class="acts">
       <button class="keep" data-keep="${i}">存入题库</button>
       <button class="drop" data-drop="${i}">丢弃</button>
@@ -1138,10 +1631,8 @@ function bindRes(it,i){
   if(box){
     box.querySelectorAll('[data-f]').forEach(f=> f.onchange = ()=>{
       const k = f.dataset.f;
-      it.data[k] = k==='tags' ? f.value.split(/[\s,，、]+/).filter(Boolean) : f.value;
+      it.data[k] = k==='points' ? f.value.split(/\n+/).map(s=>s.trim()).filter(Boolean) : f.value;
     });
-    box.querySelectorAll('[data-k]').forEach(c=> c.onchange = ()=>{
-      if(c.dataset.k==='qa') it.mkQA = c.checked; else it.mkCL = c.checked; });
   }
   const kp = $(`[data-keep="${i}"]`); if(kp) kp.onclick = ()=>keepRes(i);
   const dp = $(`[data-drop="${i}"]`); if(dp) dp.onclick = ()=>{
@@ -1150,28 +1641,26 @@ function bindRes(it,i){
 }
 
 async function keepRes(i){
-  const it = AIP.items[i];
-  const d = it.data;
-  const tags = Array.isArray(d.tags) ? d.tags : String(d.tags||'').split(/\s+/).filter(Boolean);
-  let n = 0;
+  const it = AIP.items[i], d = it.data;
+  const pts = (Array.isArray(d.points) ? d.points : String(d.points||'').split(/\n+/))
+                .map(s=>String(s).trim()).filter(Boolean);
+  if(!(d.front||'').trim() && !it.imgKey) return toast('题干是空的');
+  if(!pts.length) return toast('一条采分点都没有，先补一条');
 
-  if(it.mkQA !== false && (d.front||'').trim()){
-    const c = blankCard();
-    c.type='qa'; c.subject=d.subject||SUBJECTS[0]; c.tags=tags;
-    c.front=d.front; c.back=d.back||''; c.image=it.imgKey||'';
-    if(!d.answerVerified) c.aiUnverified = true;
-    await saveCard(c); n++;
-    it.imgKey = null;                       // 图已交给这张卡，别在丢弃时删掉
-  }
-  if(it.mkCL !== false && (d.cloze||'').indexOf('【')>=0){
-    const c = blankCard();
-    c.type='cloze'; c.subject=d.subject||SUBJECTS[0]; c.tags=tags; c.front=d.cloze;
-    await saveCard(c); n++;
-  }
-  if(!n){ toast('两张都没勾，或者内容是空的'); return; }
+  const c = blankCard();
+  c.type = 'points';
+  c.subject = d.subject || SUBJECTS[0];
+  c.front = d.front || '';
+  c.points = pts;
+  c.hint = (d.hint||'').trim();
+  c.image = it.imgKey || '';
+  if(!d.answerVerified) c.aiUnverified = true;
+  await saveCard(c);
+  it.imgKey = null;                        // 图已经交给这张卡，丢弃时别删
+
   AIP.items.splice(i,1);
   renderAI();
-  toast('存了 '+n+' 张卡');
+  toast('存好了');
 }
 
 async function runAI(files){
@@ -1185,7 +1674,7 @@ async function runAI(files){
       await DB.putImage(key, blob);
       url  = URL.createObjectURL(blob);
       const data = await aiAnalyze(blob);
-      AIP.items.push({data:data, imgKey:key, url:url, mkQA:true, mkCL:true});
+      AIP.items.push({data:data, imgKey:key, url:url});
     }catch(e){
       if(key) await DB.delImage(key);
       AIP.items.push({err: e.message || String(e)});
@@ -1263,18 +1752,28 @@ async function boot(){
   S.cards = await DB.allCards();
   if(!S.cards.length && !localStorage.getItem('bs_seeded')){
     const a = blankCard();
-    a.type='cloze'; a.subject='中国近代史'; a.tags=['洋务运动'];
-    a.front='洋务运动的口号，前期是【自强】，后期是【求富】；代表企业有江南制造总局、【福州船政局】。';
+    a.subject='中国近代史';
+    a.front='简述洋务运动的口号与代表企业。';
+    a.points=['前期口号：自强','后期口号：求富','军工：江南制造总局','军工：福州船政局','民用：轮船招商局'];
+    a.hint='一共五条。两个口号一前一后，三家企业先军工后民用。';
     const b = blankCard();
-    b.type='points'; b.subject='教资科目二'; b.tags=['教学原则'];
+    b.subject='教资科目二';
     b.front='简述中学常用的教学原则。';
     b.points=['科学性与思想性统一','理论联系实际','直观性','启发性','循序渐进','巩固性','因材施教','量力性'];
+    b.hint='八条。口诀：科理直启，循巩因量。';
     await DB.putCard(a); await DB.putCard(b);
     localStorage.setItem('bs_seeded','1');
     S.cards = await DB.allCards();
   }
+  settleRank();
   if(speechSynthesis.getVoices().length===0) speechSynthesis.onvoiceschanged = ()=>{};
   render();
+  checkNoti();
+  setInterval(checkNoti, 60000);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible'){ settleRank(); checkNoti();
+      if(S.tab==='today' && $('#review').classList.contains('hidden')) render(); }
+  });
   if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 boot();
