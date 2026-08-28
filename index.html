@@ -1533,21 +1533,31 @@ function pickJSON(txt){
 async function aiAnalyze(blob){
   const c = AIcfg.get();
   const dataUrl = await blobToDataURL(blob);
-  const body = {
+  const base = {
     model: c.model, temperature: 0.2,
     messages: [{role:'user', content:[
       {type:'image_url', image_url:{url:dataUrl}},
       {type:'text', text:AI_PROMPT}
     ]}]
   };
-  let r;
-  try{
-    r = await fetch(c.base, {method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
-      body: JSON.stringify(body)});
-  }catch(e){
-    throw new Error('连不上。多半是浏览器跨域被拦了 —— 看说明书第八节，挂一个中转地址就好。');
-  }
+  // 思考模式：识题这活儿用不上，关掉省一半输出费用，也快一截。
+  // 有的服务商不认这个字段，认不出就自动去掉重发一次。
+  const wantThink = c.think === 'on';
+  const send = async withThinking =>{
+    const body = withThinking
+      ? Object.assign({}, base, {thinking:{type: wantThink ? 'enabled' : 'disabled'}})
+      : base;
+    try{
+      return await fetch(c.base, {method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
+        body: JSON.stringify(body)});
+    }catch(e){
+      throw new Error('连不上。多半是浏览器跨域被拦了 —— 看说明书第十节，挂一个中转地址就好。');
+    }
+  };
+
+  let r = await send(true);
+  if(!r.ok && (r.status===400 || r.status===422)) r = await send(false);
   if(!r.ok){
     const t = await r.text();
     throw new Error('接口报错 '+r.status+'：'+t.slice(0,140));
@@ -1699,6 +1709,12 @@ function aiSettingsHTML(){
       <input class="input" id="aiModel" value="${esc(c.model||AI_PRESETS[p].model)}"></div>
     <div class="field"><span class="eyebrow">API Key</span>
       <input class="input" id="aiKey" type="password" value="${esc(c.key||'')}" placeholder="粘贴进来"></div>
+    <span class="eyebrow" style="margin-top:14px">思考模式</span>
+    <div class="seg">
+      <button data-th="off" class="${c.think==='on'?'':'on'}">关（省钱、快）</button>
+      <button data-th="on" class="${c.think==='on'?'on':''}">开</button>
+    </div>
+    <span class="tip">付费的旗舰视觉模型默认会先在心里想一段再回答。识别截图用不上这个，关掉能省下大约一半的输出费用，出结果也快一截。要是某张图老是认错、拆不出采分点，再开起来试试。服务商不认这个参数的话，应用会自动去掉重发，不用管。</span>
     <button class="tool" id="aiSave">保存</button>
     <button class="tool" id="aiTest">测试连接</button>
     <span class="tip">Key 只存在你自己手机里，不会发到别处。免费型号会变，报错说模型不存在的话，去服务商的模型列表页抄一个当前可用的名字填进「模型名」。</span>
@@ -1712,6 +1728,13 @@ function bindAISettings(){
     c.preset = k; c.base = AI_PRESETS[k].base; c.model = AI_PRESETS[k].model;
     AIcfg.set(c); vStats();
   });
+  box.querySelectorAll('[data-th]').forEach(b=> b.onclick = ()=>{
+    const c = AIcfg.get();
+    c.base = $('#aiBase').value.trim();      // 别把还没保存的输入冲掉
+    c.model = $('#aiModel').value.trim();
+    c.key = $('#aiKey').value.trim();
+    c.think = b.dataset.th;
+    AIcfg.set(c); vStats(); });
   $('#aiSave').onclick = ()=>{
     const c = AIcfg.get();
     c.base = $('#aiBase').value.trim();
