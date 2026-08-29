@@ -294,6 +294,10 @@ input,textarea,select{font:inherit;color:inherit}
 <script>
 'use strict';
 
+const APP_VERSION = 'v10';
+let appSWRegistration = null;
+let appSWReloading = false;
+
 /* =======================================================================
    1. 存储层 —— IndexedDB。题目文本一个表，图片 Blob 一个表。
    ======================================================================= */
@@ -1773,6 +1777,12 @@ async function vStats(){
     <span class="eyebrow">字号</span>
     <div class="seg">${[['15','小'],['17','中'],['19','大'],['21','特大']].map(([v,n])=>
       `<button data-fs="${v}" class="${S.fontSize===v?'on':''}">${n}</button>`).join('')}</div>
+  </div>
+
+  <div class="card">
+    <span class="eyebrow">应用更新 · ${APP_VERSION}</span>
+    <div class="muted">联网打开时会自动检查新版。若界面没有及时变化，点一次下面的按钮即可；不会删除题库和 API Key。</div>
+    <button class="tool" id="appUpdate">立即检查更新</button>
   </div>`;
 
   $('#bExp').onclick     = ()=>doExport(true);
@@ -1786,6 +1796,7 @@ async function vStats(){
 
   app().querySelectorAll('[data-fs]').forEach(b=> b.onclick = ()=>{
     S.fontSize = b.dataset.fs; localStorage.setItem('bs_font', S.fontSize); render(); });
+  $('#appUpdate').onclick = forceAppUpdate;
   bindAISettings();
 }
 
@@ -2222,6 +2233,57 @@ function bindAISettings(){
 /* =======================================================================
    9. 启动
    ======================================================================= */
+async function setupAutoUpdate(){
+  if(!('serviceWorker' in navigator)) return;
+
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(appSWReloading) return;
+    appSWReloading = true;
+    location.reload();
+  });
+
+  try{
+    const reg = await navigator.serviceWorker.register('sw.js', {updateViaCache:'none'});
+    appSWRegistration = reg;
+
+    const activateWaiting = ()=>{
+      if(reg.waiting) reg.waiting.postMessage({type:'SKIP_WAITING'});
+    };
+    activateWaiting();
+
+    reg.addEventListener('updatefound', ()=>{
+      const worker = reg.installing;
+      if(!worker) return;
+      worker.addEventListener('statechange', ()=>{
+        if(worker.state==='installed' && navigator.serviceWorker.controller)
+          worker.postMessage({type:'SKIP_WAITING'});
+      });
+    });
+
+    await reg.update();
+    activateWaiting();
+  }catch(e){}
+}
+
+async function forceAppUpdate(){
+  if(!navigator.onLine) return toast('现在没有网络，联网后再检查');
+  toast('正在检查更新…');
+
+  try{
+    const fresh = new URL('index.html', location.href);
+    fresh.searchParams.set('_update', Date.now());
+    const res = await fetch(fresh.toString(), {cache:'no-store'});
+    if(!res.ok) throw new Error('network');
+
+    const reg = appSWRegistration || await navigator.serviceWorker.getRegistration();
+    if(reg){ try{ await reg.update(); }catch(e){} }
+    toast('已获取最新版，正在重新打开…');
+    setTimeout(()=>location.replace(fresh.toString()), 500);
+  }catch(e){
+    toast('检查失败，请确认网络后重试');
+  }
+}
+
 document.querySelectorAll('#tabs button').forEach(b=> b.onclick = ()=>{
   if(S.tab==='listen' && b.dataset.tab!=='listen') stopListen(false);
   if(b.dataset.tab==='listen' && !L.playing){ L.queue = null; L.i = 0; L.hinted = false; }
@@ -2230,6 +2292,7 @@ document.querySelectorAll('#tabs button').forEach(b=> b.onclick = ()=>{
 });
 
 async function boot(){
+  setupAutoUpdate();
   S.cards = await DB.allCards();
   if(!S.cards.length && !localStorage.getItem('bs_seeded')){
     const a = blankCard();
@@ -2253,7 +2316,6 @@ async function boot(){
     if(document.visibilityState==='visible'){ settleRank();
       if(S.tab==='today' && $('#review').classList.contains('hidden')) render(); }
   });
-  if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 boot();
 </script>
