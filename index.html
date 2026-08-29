@@ -101,6 +101,17 @@ input,textarea,select{font:inherit;color:inherit}
 .countedit .editacts .save{background:var(--ink);color:var(--on-ink);font-weight:600}
 .countedit .editacts .clear{color:var(--ochre)}
 
+/* ---- 背书提醒 ---- */
+.remcard .remrow{display:flex;align-items:end;gap:10px;margin-top:12px}
+.remcard .remrow .field{flex:1;margin-top:0}
+.remcard .remrow .tool{flex-shrink:0;margin:0;padding:12px 15px;background:var(--ink);color:var(--on-ink)}
+.remcard .remacts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.remcard .remacts .tool{flex:1;min-width:130px;margin:0;text-align:center}
+.remcard .remstate{margin-top:10px;padding:9px 11px;background:var(--subtle);border-radius:8px;
+  color:var(--mute);font-size:.78rem;line-height:1.55}
+.remcard .remstate.on{color:var(--pine)}
+.remcard .offbtn{color:var(--ochre);border:1px solid var(--danger-line);background:transparent}
+
 /* ---- review ---- */
 #review{position:fixed;inset:0;z-index:50;background:var(--paper);overflow-y:auto;
   padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 16px)}
@@ -280,7 +291,7 @@ input,textarea,select{font:inherit;color:inherit}
 .rankcard .tx{flex:1;min-width:0;display:block}
 .rankcard .tier{display:block;font-size:1.06rem;font-weight:600;letter-spacing:.02em}
 .rankcard .sub{display:block;font-size:.78rem;color:var(--mute);margin-top:2px;line-height:1.5}
-.rankcard .em svg{display:block;width:62px;height:62px}
+.rankcard .em img{display:block;width:62px;height:62px;object-fit:contain}
 .rankcard .go{color:var(--mute);font-size:1.1rem;flex-shrink:0}
 .stars{display:flex;gap:5px;margin-top:6px;line-height:0}
 .stars svg{width:16px;height:16px}
@@ -288,7 +299,7 @@ input,textarea,select{font:inherit;color:inherit}
   padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 24px)}
 #rankPane .inner{max-width:640px;margin:0 auto}
 .bigem{text-align:center;padding:6px 0 2px;line-height:0}
-.bigem svg{width:186px;height:186px}
+.bigem img{width:186px;height:186px;object-fit:contain}
 .bigname{text-align:center;font-size:1.5rem;font-weight:600;letter-spacing:.04em;margin-top:8px}
 .bigsub{text-align:center;color:var(--mute);font-size:.85rem;margin-top:3px}
 .bigstars{display:flex;gap:10px;justify-content:center;margin-top:14px;line-height:0}
@@ -298,7 +309,7 @@ input,textarea,select{font:inherit;color:inherit}
 .ladder{display:flex;gap:4px;margin-top:6px}
 .ladder .lv{flex:1;text-align:center;opacity:.28;line-height:0}
 .ladder .lv.on{opacity:1}
-.ladder .lv svg{width:100%;height:auto;max-width:52px}
+.ladder .lv img{width:100%;height:auto;max-width:52px;aspect-ratio:1;object-fit:contain}
 .ladder .lv b{display:block;font-size:.6rem;color:var(--mute);margin-top:3px;font-weight:400;line-height:1.3}
 .logrow{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
 .logrow i{width:16px;height:16px;border-radius:4px;background:var(--log-empty);display:block}
@@ -337,7 +348,7 @@ input,textarea,select{font:inherit;color:inherit}
 <script>
 'use strict';
 
-const APP_VERSION = 'v11';
+const APP_VERSION = 'v12';
 let appSWRegistration = null;
 let appSWReloading = false;
 
@@ -730,6 +741,142 @@ function bindCountdown(){
   };
 }
 
+/* 背书提醒：网页通知负责 App 打开时的到点提醒；系统日历负责 App 关闭/锁屏时的可靠提醒。 */
+let reminderTimer = null;
+const REMINDER = {
+  key:'bs_reminder',
+  get(){
+    let r={}; try{ r=JSON.parse(localStorage.getItem(this.key)||'{}')||{}; }catch(e){}
+    const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(r.time||'')) ? String(r.time) : '20:00';
+    return {enabled:!!r.enabled, time:time, lastShown:String(r.lastShown||''),
+      calendarAt:Number(r.calendarAt||0)};
+  },
+  set(r){ localStorage.setItem(this.key, JSON.stringify(r)); }
+};
+function isStandaloneApp(){
+  return !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    window.navigator.standalone===true;
+}
+function reminderPermissionText(){
+  if(typeof Notification==='undefined') return '当前打开方式不支持网页通知';
+  if(Notification.permission==='granted') return '网页通知已允许';
+  if(Notification.permission==='denied') return '网页通知已关闭，请到 iPhone“设置 → 通知 → 背书”重新开启';
+  if(!isStandaloneApp()) return '先添加到主屏幕，再从桌面打开才能授权网页通知';
+  return '保存提醒时会请求网页通知权限';
+}
+function reminderHTML(){
+  const r=REMINDER.get();
+  return `<div class="card remcard">
+    <span class="eyebrow">背书提醒</span>
+    <div class="muted">应用内提醒在完成今日目标后不再催；系统日历提醒会每天固定响一次。</div>
+    <div class="remrow">
+      <div class="field"><span class="muted">提醒时间</span>
+        <input class="input" id="remTime" type="time" value="${r.time}"></div>
+      <button class="tool" id="remSave">${r.enabled?'更新时间':'保存并开启'}</button>
+    </div>
+    <div class="remstate ${r.enabled?'on':''}">${r.enabled?`已开启：每天 ${r.time}　·　`:''}${reminderPermissionText()}${
+      r.calendarAt?'　·　已生成过系统日历提醒':''}</div>
+    <div class="remacts">
+      <button class="tool" id="remTest">测试网页通知</button>
+      <button class="tool" id="remCalendar">添加到 iPhone 日历</button>
+      ${r.enabled?'<button class="tool offbtn" id="remOff">关闭提醒</button>':''}
+    </div>
+    <span class="tip">iPhone 关闭网页 App 后不会继续运行定时器。想在锁屏时也准点响，请再点一次“添加到 iPhone 日历”，打开生成的文件并添加；日历会每天可靠提醒。改时间后，重新生成一次即可。</span>
+  </div>`;
+}
+async function requestReminderPermission(){
+  if(typeof Notification==='undefined') return 'unsupported';
+  if(Notification.permission!=='default') return Notification.permission;
+  try{ return await Notification.requestPermission(); }catch(e){ return 'unsupported'; }
+}
+async function showStudyNotification(force){
+  const r=REMINDER.get(), today=dkey(new Date()), n=doneToday(), goal=RK.goal();
+  if(!force && (!r.enabled || r.lastShown===today || n>=goal)) return false;
+  if(!force){ r.lastShown=today; REMINDER.set(r); }
+  const left=Math.max(0,goal-n);
+  const title=force?'背书通知测试':'背书时间到了';
+  const body=force?'通知能正常显示。到了设定时间，我会提醒你开始背书。':
+    `今天已复习 ${n}/${goal} 题，还差 ${left} 题达标。`;
+  let shown=false;
+  try{
+    if(typeof Notification!=='undefined' && Notification.permission==='granted' && 'serviceWorker' in navigator){
+      const reg=appSWRegistration || await Promise.race([
+        navigator.serviceWorker.ready,new Promise(res=>setTimeout(()=>res(null),3000))]);
+      if(reg){
+        await reg.showNotification(title,{body:body,icon:'icon-192.png',badge:'icon-192.png',
+          tag:force?'beishu-reminder-test':'beishu-reminder-'+today,
+          data:{url:'./index.html'},renotify:true});
+        shown=true;
+      }
+    }
+  }catch(e){}
+  if(!shown) toast(force?'当前环境发不了网页通知':'背书时间到了 · 打开今日页开始复习');
+  return true;
+}
+function reminderTimeToday(time){
+  const a=time.split(':').map(Number), d=new Date();
+  d.setHours(a[0],a[1],0,0); return d;
+}
+function scheduleStudyReminder(){
+  clearTimeout(reminderTimer); reminderTimer=null;
+  const r=REMINDER.get(); if(!r.enabled) return;
+  const now=new Date(), next=reminderTimeToday(r.time);
+  if(next<=now) next.setDate(next.getDate()+1);
+  reminderTimer=setTimeout(async()=>{ await showStudyNotification(false); scheduleStudyReminder(); },
+    Math.max(500,next.getTime()-now.getTime()));
+}
+async function checkStudyReminder(){
+  const r=REMINDER.get();
+  if(r.enabled && new Date()>=reminderTimeToday(r.time)) await showStudyNotification(false);
+  scheduleStudyReminder();
+}
+function icsLocal(d){
+  return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'T'+
+    String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+'00';
+}
+function downloadReminderCalendar(time){
+  const start=reminderTimeToday(time); if(start<=new Date()) start.setDate(start.getDate()+1);
+  const end=new Date(start.getTime()+15*MIN);
+  const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Beishu//Daily Study Reminder//ZH-CN',
+    'CALSCALE:GREGORIAN','METHOD:PUBLISH','BEGIN:VEVENT','UID:beishu-daily-reminder@beishu.local',
+    'DTSTAMP:'+stamp,'DTSTART:'+icsLocal(start),'DTEND:'+icsLocal(end),'RRULE:FREQ=DAILY',
+    'SUMMARY:背书时间到了','DESCRIPTION:打开“背书”App，完成今天的复习目标。',
+    'STATUS:CONFIRMED','TRANSP:TRANSPARENT','BEGIN:VALARM','TRIGGER:PT0M','ACTION:DISPLAY',
+    'DESCRIPTION:背书时间到了','END:VALARM','END:VEVENT','END:VCALENDAR',''].join('\r\n');
+  const blob=new Blob(['\ufeff'+ics],{type:'text/calendar;charset=utf-8'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=`背书提醒-每天${time.replace(':','')}点.ics`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  const r=REMINDER.get(); r.time=time; r.enabled=true; r.calendarAt=Date.now(); REMINDER.set(r);
+  scheduleStudyReminder();
+  toast('日历文件已生成，请打开并点“添加”');
+}
+function bindReminderSettings(){
+  const save=$('#remSave'); if(!save) return;
+  save.onclick=async()=>{
+    const time=$('#remTime').value;
+    if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return toast('请先选择提醒时间');
+    const r=REMINDER.get(); r.enabled=true; r.time=time; REMINDER.set(r);
+    const permission=await requestReminderPermission();
+    scheduleStudyReminder(); await vStats();
+    toast(permission==='granted'?'提醒时间已保存':'时间已保存；锁屏提醒请添加到日历');
+  };
+  $('#remTest').onclick=async()=>{
+    const permission=await requestReminderPermission();
+    if(permission==='granted') await showStudyNotification(true);
+    else alert('当前无法发送网页通知。\n\n请确认已经把应用添加到主屏幕，并在 iPhone“设置 → 通知 → 背书”里允许通知。锁屏准点提醒仍可使用“添加到 iPhone 日历”。');
+    await vStats();
+  };
+  $('#remCalendar').onclick=()=>{
+    const time=$('#remTime').value;
+    if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return toast('请先选择提醒时间');
+    downloadReminderCalendar(time); vStats();
+  };
+  const off=$('#remOff'); if(off) off.onclick=()=>{
+    const r=REMINDER.get(); r.enabled=false; REMINDER.set(r); scheduleStudyReminder(); vStats(); toast('应用内提醒已关闭');
+  };
+}
+
 function toast(msg){
   const el = $('#toast'); el.textContent = msg; el.classList.add('show');
   clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove('show'), 1800);
@@ -758,50 +905,21 @@ async function removeCard(id){
    3.5 段位 —— 每天达标 +1 颗星，三颗星升一小段，四小段升一大段
    ======================================================================= */
 const TIERS = [
-  {k:'青铜', c:['#CE9463','#75431D'], a:'#F3D0AA'},
-  {k:'白银', c:['#DCE6EC','#7C929F'], a:'#FFFFFF'},
-  {k:'黄金', c:['#F5D264','#A9740B'], a:'#FFF4C8'},
-  {k:'铂金', c:['#8FE9DB','#207F74'], a:'#E2FFFA'},
-  {k:'钻石', c:['#A9C8FF','#2F52BE'], a:'#E8F0FF'},
-  {k:'最强王者', c:['#F0D588','#8B4FC9'], a:'#FFF6D6'}
+  {k:'青铜', icon:'assets/ranks/bronze.png'},
+  {k:'白银', icon:'assets/ranks/silver.png'},
+  {k:'黄金', icon:'assets/ranks/gold.png'},
+  {k:'铂金', icon:'assets/ranks/platinum.png'},
+  {k:'钻石', icon:'assets/ranks/diamond.png'},
+  {k:'最强王者', icon:'assets/ranks/challenger.png'}
 ];
 const DIVN = ['Ⅳ','Ⅲ','Ⅱ','Ⅰ'];
 const KING = 5;
 const GOAL_DEFAULT = 20;
 
-let _svgN = 0;
 function rankSVG(t, size){
   const T = TIERS[Math.max(0,Math.min(KING,t))];
-  const id = 'r'+(++_svgN);
-  const king = t===KING;
-  const top = king ? 30 : 17;      // 盾牌顶边
-  const in1 = king ? 40 : 28;      // 内框顶边
   const wh = size ? ` width="${size}" height="${size}"` : '';
-  return `<svg viewBox="0 0 120 120"${wh} xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="${id}a" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${T.c[0]}"/><stop offset="100%" stop-color="${T.c[1]}"/></linearGradient>
-    <linearGradient id="${id}b" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="${T.c[1]}"/><stop offset="100%" stop-color="${T.c[0]}"/></linearGradient>
-  </defs>
-  <g fill="url(#${id}b)" opacity=".95">
-    <path d="M32 44 L4 31 L11 41 L31 50 Z"/>
-    <path d="M31 52 L2 45 L9 55 L30 59 Z"/>
-    <path d="M30 60 L7 61 L14 70 L29 68 Z"/>
-    <path d="M88 44 L116 31 L109 41 L89 50 Z"/>
-    <path d="M89 52 L118 45 L111 55 L90 59 Z"/>
-    <path d="M90 60 L113 61 L106 70 L91 68 Z"/>
-  </g>
-  ${king?`<path d="M60 3 L71 17 L84 7 L80 28 L40 28 L36 7 L49 17 Z"
-      fill="url(#${id}a)" stroke="${T.c[1]}" stroke-width="2" stroke-linejoin="round"/>
-    <circle cx="60" cy="11" r="3" fill="${T.a}"/>`:''}
-  <path d="M60 ${top} L95 ${top+13} V62 C95 85 79 99 60 109 C41 99 25 85 25 62 V${top+13} Z"
-    fill="url(#${id}a)" stroke="${T.c[1]}" stroke-width="2.6" stroke-linejoin="round"/>
-  <path d="M60 ${in1} L87 ${in1+10} V62 C87 80 74 92 60 100 C46 92 33 80 33 62 V${in1+10} Z"
-    fill="none" stroke="${T.a}" stroke-width="1.7" opacity=".7"/>
-  <path d="M60 46 L79 60 L60 75 L41 60 Z" fill="${T.a}" opacity=".93"/>
-  <path d="M60 55 L70 60.5 L60 66.5 L50 60.5 Z" fill="${T.c[1]}"/>
-  </svg>`;
+  return `<img src="${T.icon}" alt="${T.k}段位徽章"${wh} loading="eager">`;
 }
 function starSVG(on){
   return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path
@@ -811,8 +929,16 @@ function starSVG(on){
 }
 
 const RK = {
-  get(){ let r=null; try{ r = JSON.parse(localStorage.getItem('bs_rank')||'null'); }catch(e){}
-         return r || {tier:0, div:0, stars:0, pts:0, start:null, log:{}}; },
+  get(){
+    let r=null; try{ r=JSON.parse(localStorage.getItem('bs_rank')||'null'); }catch(e){}
+    if(!r || typeof r!=='object') r={};
+    const tier=Math.max(0,Math.min(KING,parseInt(r.tier,10)||0));
+    return {tier:tier,div:tier===KING?0:Math.max(0,Math.min(3,parseInt(r.div,10)||0)),
+      stars:tier===KING?0:Math.max(0,Math.min(2,parseInt(r.stars,10)||0)),
+      pts:Math.max(0,parseInt(r.pts,10)||0),
+      start:/^\d{4}-\d{2}-\d{2}$/.test(String(r.start||''))?String(r.start):null,
+      log:r.log && typeof r.log==='object' && !Array.isArray(r.log)?r.log:{}};
+  },
   set(r){ localStorage.setItem('bs_rank', JSON.stringify(r)); },
   goal(){ const v = parseInt(localStorage.getItem('bs_goal')||'',10);
           return (v>0 && v<=200) ? v : GOAL_DEFAULT; },
@@ -1885,6 +2011,8 @@ async function vStats(){
 
   <div style="margin-top:14px">${rankCardHTML()}</div>
 
+  ${reminderHTML()}
+
   <div class="card">
     <span class="eyebrow">复习策略</span>
     <div class="muted">决定「记得 / 模糊 / 忘了」之后下次什么时候再见。换了立刻生效，只影响以后评的题。</div>
@@ -1907,7 +2035,7 @@ async function vStats(){
 
   <div class="card">
     <span class="eyebrow">备份 · 已占用 ${usage}</span>
-    <div class="muted">建议每周导一次。导出的文件存到「文件」App 或发给自己。</div>
+    <div class="muted">现在会一起保存题库、段位、每日目标、倒计时、提醒、字号和识别设置。备份内含 API Key，只存给自己，不要外传。</div>
     <button class="tool" id="bExp">导出（含图片）</button>
     <button class="tool" id="bExpLite">导出（仅文字）</button>
     <button class="tool" id="bImp">导入备份</button>
@@ -1924,7 +2052,7 @@ async function vStats(){
 
   <div class="card">
     <span class="eyebrow">应用更新 · ${APP_VERSION}</span>
-    <div class="muted">联网打开时会自动检查新版。若界面没有及时变化，点一次下面的按钮即可；不会删除题库和 API Key。</div>
+    <div class="muted">联网打开时会自动检查新版。若界面没有及时变化，点一次下面的按钮即可；不会删除题库、段位、提醒或 API Key。</div>
     <button class="tool" id="appUpdate">立即检查更新</button>
   </div>`;
 
@@ -1940,14 +2068,33 @@ async function vStats(){
   app().querySelectorAll('[data-fs]').forEach(b=> b.onclick = ()=>{
     S.fontSize = b.dataset.fs; localStorage.setItem('bs_font', S.fontSize); render(); });
   $('#appUpdate').onclick = forceAppUpdate;
+  bindReminderSettings();
   bindAISettings();
 }
 
 const blobToDataURL = b => new Promise(r=>{ const f=new FileReader(); f.onload=()=>r(f.result); f.readAsDataURL(b); });
 
+const BACKUP_SETTING_KEYS = ['bs_rank','bs_goal','bs_strat','bs_font','bs_countdown',
+  'bs_hidden_categories','bs_last','bs_ai','bs_reminder','bs_seeded'];
+function exportBackupSettings(){
+  const out={};
+  BACKUP_SETTING_KEYS.forEach(k=>{ const v=localStorage.getItem(k); if(v!==null) out[k]=v; });
+  return out;
+}
+function restoreBackupSettings(settings){
+  if(!settings || typeof settings!=='object' || Array.isArray(settings)) return false;
+  let restored=false;
+  BACKUP_SETTING_KEYS.forEach(k=>{
+    const v=settings[k];
+    if(typeof v==='string' && v.length<=1000000){ localStorage.setItem(k,v); restored=true; }
+  });
+  return restored;
+}
+
 async function doExport(withImages){
   toast('正在打包…');
-  const out = {v:1, at:Date.now(), cards:S.cards, images:{}};
+  const out = {v:2, app:APP_VERSION, at:Date.now(), cards:S.cards, images:{},
+    settings:exportBackupSettings()};
   if(withImages){
     for(const c of S.cards){
       if(!c.image) continue;
@@ -1970,23 +2117,32 @@ async function doImport(e){
   const f = e.target.files[0]; if(!f) return;
   let data;
   try{ data = JSON.parse(await f.text()); }catch(err){ return toast('文件读不出来'); }
-  if(!data || !data.cards || !data.cards.length) return toast('备份里没有题目');
-  if(!confirm(`导入 ${data.cards.length} 题？id 相同的会被覆盖，其余追加。`)) return;
+  const cards=data && Array.isArray(data.cards)?data.cards:[];
+  const hasSettings=!!(data && data.settings && typeof data.settings==='object');
+  if(!cards.length && !hasSettings) return toast('备份里没有题目或设置');
+  const what=[cards.length?`${cards.length} 题`:'',hasSettings?'段位与全部设置':''].filter(Boolean).join('、');
+  if(!confirm(`导入 ${what}？题目 id 相同的会被覆盖，其余追加。`)){ e.target.value=''; return; }
 
   for(const key in (data.images||{})){
     const res = await fetch(data.images[key]);
     await DB.putImage(key, await res.blob());
   }
-  for(const raw of data.cards){
+  for(const raw of cards){
     const merged = Object.assign(blankCard(), raw);
     await DB.putCard(merged);
   }
+  const settingsRestored=restoreBackupSettings(data.settings);
   S.cards = await DB.allCards();
   S.imgURL = {};
-  const last = newestCardLocation();
-  if(last) LAST.set(last.sub, last.topic);  // 导入后下一道自动接着最新归类
+  S.fontSize=localStorage.getItem('bs_font')||'17';
+  if(!settingsRestored || !Object.prototype.hasOwnProperty.call(data.settings||{},'bs_last')){
+    const last = newestCardLocation();
+    if(last) LAST.set(last.sub, last.topic);  // 老备份没有录题位置时，从最新题目恢复
+  }
+  settleRank(); checkStudyReminder();
   render();
-  toast('导入完成');
+  e.target.value='';
+  toast(settingsRestored?'导入完成 · 段位与设置已恢复':'导入完成');
 }
 
 
@@ -2457,8 +2613,9 @@ async function boot(){
   settleRank();
   if(speechSynthesis.getVoices().length===0) speechSynthesis.onvoiceschanged = ()=>{};
   render();
+  checkStudyReminder();
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible'){ settleRank();
+    if(document.visibilityState==='visible'){ settleRank(); checkStudyReminder();
       if(S.tab==='today' && $('#review').classList.contains('hidden')) render(); }
   });
 }
