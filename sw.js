@@ -1,5 +1,5 @@
 // 改动 index.html 后，把版本号 +1；v10 起会自动发现并切换新版
-const V = 'beishu-v10';
+const V = 'beishu-v11';
 const FILES = ['./', './index.html', './manifest.json',
                './icon-180.png', './icon-192.png', './icon-512.png'];
 
