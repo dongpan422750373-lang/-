@@ -145,6 +145,12 @@ input,textarea,select{font:inherit;color:inherit}
 .chiprow::-webkit-scrollbar{display:none}
 .chiprow .chip{white-space:nowrap;flex-shrink:0;margin:0 7px 0 0;padding:6px 13px;font-size:.82rem;background:var(--paper)}
 .chiprow .chip.on{background:var(--ink);color:#fff}
+.taxchip{display:inline-flex;align-items:stretch;flex-shrink:0;margin:0 7px 0 0;
+  border-radius:999px;background:var(--paper);overflow:hidden;color:var(--ink-soft)}
+.taxchip .pick{padding:6px 6px 6px 13px;font-size:.82rem;white-space:nowrap}
+.taxchip .kill{padding:6px 10px 6px 5px;font-size:.82rem;color:var(--mute);line-height:1}
+.taxchip.on{background:var(--ink);color:#fff}
+.taxchip.on .kill{color:rgba(255,255,255,.72)}
 #thumb{width:100%;border-radius:9px;margin-top:12px;display:block}
 
 /* ---- list ---- */
@@ -308,7 +314,7 @@ const DB = (()=>{
       const s = t.objectStore(store);
       let out;
       try{ out = fn(s); }catch(e){ rej(e); return; }
-      t.oncomplete = ()=>res(out && out.result !== undefined ? out.result : out);
+      t.oncomplete = ()=>res(out && typeof out==='object' && ('result' in out) ? out.result : out);
       t.onerror = ()=>rej(t.error);
     });
   }
@@ -335,33 +341,78 @@ const TYPENAME = {cloze:'挖空', qa:'问答', points:'采分点'};
 const topicOf = c => (((c&&c.tags)||[])[0]||'').trim();
 const locTime = c => Number((c&&c.locationAt)||(c&&c.created)||0);
 
+// 删除分类只隐藏这个选项，不碰已经录好的题；重新输入同名分类即可恢复。
+const CAT = {
+  key:'bs_hidden_categories',
+  get(){
+    let r={}; try{ r=JSON.parse(localStorage.getItem(this.key)||'{}')||{}; }catch(e){}
+    return {
+      subjects:Array.isArray(r.subjects) ? r.subjects.map(String) : [],
+      topics:r.topics && typeof r.topics==='object' ? r.topics : {}
+    };
+  },
+  set(r){ localStorage.setItem(this.key,JSON.stringify(r)); },
+  isSubjectHidden(sub){ return this.get().subjects.includes(String(sub||'').trim()); },
+  isTopicHidden(sub,topic){
+    const r=this.get(), a=r.topics[String(sub||'').trim()];
+    return Array.isArray(a) && a.includes(String(topic||'').trim());
+  },
+  hideSubject(sub){
+    sub=String(sub||'').trim(); if(!sub) return;
+    const r=this.get(); if(!r.subjects.includes(sub)) r.subjects.push(sub); this.set(r);
+  },
+  hideTopic(sub,topic){
+    sub=String(sub||'').trim(); topic=String(topic||'').trim(); if(!sub||!topic) return;
+    const r=this.get(); if(!Array.isArray(r.topics[sub])) r.topics[sub]=[];
+    if(!r.topics[sub].includes(topic)) r.topics[sub].push(topic); this.set(r);
+  },
+  unhideSubject(sub){
+    sub=String(sub||'').trim(); if(!sub) return;
+    const r=this.get(), n=r.subjects.filter(x=>x!==sub);
+    if(n.length!==r.subjects.length){ r.subjects=n; this.set(r); }
+  },
+  unhideTopic(sub,topic){
+    sub=String(sub||'').trim(); topic=String(topic||'').trim(); if(!sub||!topic) return;
+    const r=this.get(), a=Array.isArray(r.topics[sub])?r.topics[sub]:[];
+    const n=a.filter(x=>x!==topic);
+    if(n.length!==a.length){ if(n.length) r.topics[sub]=n; else delete r.topics[sub]; this.set(r); }
+  }
+};
+
 // 内置科目 + 自己写过的科目；最近用过的排在前面
-function allSubjects(){
+function allSubjects(includeHidden){
   const used = {}, builtIn = {};
   SUBJECTS.forEach((s,i)=>{ used[s]=0; builtIn[s]=i; });
   S.cards.forEach(c=>{ const s=(c.subject||'').trim();
     if(s) used[s] = Math.max(used[s]||0, locTime(c)); });
   const last = LAST.raw();
   if(last.sub) used[last.sub] = Math.max(used[last.sub]||0, Number(last.at||0));
-  return Object.keys(used).sort((a,b)=>(used[b]-used[a]) ||
+  return Object.keys(used).filter(s=>includeHidden || !CAT.isSubjectHidden(s)).sort((a,b)=>(used[b]-used[a]) ||
     ((builtIn[a]??999)-(builtIn[b]??999)) || a.localeCompare(b,'zh-CN'));
 }
 // 某个科目下用过的考点，最近录入的排前面；不传科目就是全部
-function allTopics(sub){
+function allTopics(sub,includeHidden){
   const m = {};
   S.cards.forEach(c=>{
-    if(sub && (c.subject||'').trim()!==sub) return;
+    const cs=(c.subject||'').trim();
+    if(sub && cs!==sub) return;
     const t = topicOf(c);
+    if(!includeHidden && (CAT.isSubjectHidden(cs)||CAT.isTopicHidden(cs,t))) return;
     if(t) m[t] = Math.max(m[t]||0, locTime(c));
   });
   const last = LAST.raw();
-  if(last.topic && (!sub || last.sub===sub)) m[last.topic] = Math.max(m[last.topic]||0, Number(last.at||0));
+  if(last.topic && (!sub || last.sub===sub) && (includeHidden ||
+      (!CAT.isSubjectHidden(last.sub)&&!CAT.isTopicHidden(last.sub,last.topic))))
+    m[last.topic] = Math.max(m[last.topic]||0, Number(last.at||0));
   return Object.keys(m).sort((a,b)=>m[b]-m[a]);
 }
 
 // 题库里最近录入的归类：本地记忆丢了、或刚导入备份时也能自动找回
 function newestCardLocation(){
-  const c = S.cards.slice().sort((a,b)=>locTime(b)-locTime(a))[0];
+  const c = S.cards.slice().sort((a,b)=>locTime(b)-locTime(a)).find(x=>{
+    const sub=(x.subject||'').trim(), topic=topicOf(x);
+    return sub && !CAT.isSubjectHidden(sub) && !CAT.isTopicHidden(sub,topic);
+  });
   if(!c || !(c.subject||'').trim()) return null;
   return {sub:(c.subject||'').trim(), topic:topicOf(c), at:locTime(c)};
 }
@@ -371,7 +422,9 @@ const LAST = {
   raw(){ try{ return JSON.parse(localStorage.getItem('bs_last')||'{}'); }catch(e){ return {}; } },
   get(){
     const saved = this.raw(), fromCards = newestCardLocation();
-    if(!saved.sub) return fromCards || {};
+    const savedOK = saved.sub && !CAT.isSubjectHidden(saved.sub) &&
+      !CAT.isTopicHidden(saved.sub,saved.topic||'');
+    if(!savedOK) return fromCards || {};
     if(fromCards && fromCards.at > Number(saved.at||0)) return fromCards;
     return saved;
   },
@@ -384,6 +437,7 @@ function recentLocations(limit){
   const out = [], seen = {};
   const add = x=>{
     if(!x || !x.sub) return;
+    if(CAT.isSubjectHidden(x.sub)||CAT.isTopicHidden(x.sub,x.topic||'')) return;
     const key = x.sub+'\u0000'+(x.topic||'');
     if(seen[key]) return;
     seen[key]=1; out.push({sub:x.sub, topic:x.topic||'', at:Number(x.at||0)});
@@ -428,8 +482,10 @@ const ptsToLines = arr => (arr||[]).map(ptObj)
 
 function blankCard(){
   const l = LAST.get();
+  const sub = l.sub || allSubjects()[0] || '未分类';
+  const topic = l.sub===sub ? (l.topic||'') : '';
   return {id: Date.now().toString(36)+Math.random().toString(36).slice(2,7),
-    type:'points', subject:l.sub||SUBJECTS[0], tags:l.topic?[l.topic]:[],
+    type:'points', subject:sub, tags:topic?[topic]:[],
     front:'', back:'', points:[{t:'',subs:[]}],
     hint:'', image:'', created:Date.now(), due:Date.now(), interval:0, ease:2.5,
     reps:0, lapses:0, step:0, errorType:null, history:[]};
@@ -867,7 +923,8 @@ function loadCard(){
 
 async function renderReview(){
   const c = R.card, el = $('#review .inner');
-  const imgSrc = c.image ? await imgURLFor(c.image) : '';
+  // 自动录题已有文字题干时不再展示原截图；旧版留下的卡也立即生效。
+  const imgSrc = c.image && !String(c.front||'').trim() ? await imgURLFor(c.image) : '';
   let bodyHTML = '';
 
   if(c.type==='cloze'){
@@ -1190,14 +1247,38 @@ const PH = {
 // 归类那两排胶囊：点一下就把上面的输入框填上
 function subChipHTML(cur){
   return allSubjects().map(s=>
-    `<span class="chip${s===(cur||'').trim()?' on':''}" data-sub-v="${esc(s)}">${esc(s)}</span>`).join('');
+    `<span class="taxchip${s===(cur||'').trim()?' on':''}">
+      <button type="button" class="pick" data-sub-v="${esc(s)}">${esc(s)}</button>
+      <button type="button" class="kill" data-del-sub="${esc(s)}" aria-label="删除${esc(s)}">×</button>
+    </span>`).join('');
 }
 function topicChipHTML(sub, cur){
   const ts = allTopics((sub||'').trim()).slice(0,20);
   if(!ts.length) return `<span class="muted" style="font-size:.8rem;padding-top:3px">
     这个科目下还没有考点，上面直接写一个就是。</span>`;
   return ts.map(t=>
-    `<span class="chip${t===(cur||'').trim()?' on':''}" data-topic-v="${esc(t)}">${esc(t)}</span>`).join('');
+    `<span class="taxchip${t===(cur||'').trim()?' on':''}">
+      <button type="button" class="pick" data-topic-v="${esc(t)}">${esc(t)}</button>
+      <button type="button" class="kill" data-del-topic="${esc(t)}" aria-label="删除${esc(t)}">×</button>
+    </span>`).join('');
+}
+function hideSubjectChoice(sub){
+  sub=String(sub||'').trim(); if(!sub) return false;
+  const n=S.cards.filter(c=>(c.subject||'').trim()===sub).length;
+  const msg=`删除科目选项“${sub}”？`+(n
+    ? `\n\n已有 ${n} 道题不会被删除，仍能在题库“全部”中找到。`
+    : '')+'\n\n以后重新输入同名科目即可恢复。';
+  if(!confirm(msg)) return false;
+  CAT.hideSubject(sub); return true;
+}
+function hideTopicChoice(sub,topic){
+  sub=String(sub||'').trim(); topic=String(topic||'').trim(); if(!sub||!topic) return false;
+  const n=S.cards.filter(c=>(c.subject||'').trim()===sub && topicOf(c)===topic).length;
+  const msg=`删除“${sub}”下的考点“${topic}”？`+(n
+    ? `\n\n已有 ${n} 道题不会被删除，仍能在题库“全部”中找到。`
+    : '')+'\n\n以后重新输入同名考点即可恢复。';
+  if(!confirm(msg)) return false;
+  CAT.hideTopic(sub,topic); return true;
 }
 function recentLocHTML(curSub, curTopic){
   const rows = recentLocations(8);
@@ -1246,7 +1327,8 @@ async function vAdd(){
     <div class="chiprow" id="topicChips">${topicChipHTML(d.subject, topicOf(d))}</div>
     <span class="tip">新录题会自动填入最近一道的归类；刚导入备份也能从题库恢复。
       两个输入框都能直接改。写了考点之后，题库能按考点单独筛，
-      统计里的「最该回头看的」也会精确到考点，而不是笼统一个科目。</span>
+      统计里的「最该回头看的」也会精确到考点，而不是笼统一个科目。分类右侧的 ×
+      只删除选择项，不会删除已有题目；重新输入同名分类就能恢复。</span>
   </div>
 
   <div class="card">
@@ -1294,7 +1376,7 @@ async function vAdd(){
 
   const sync = ()=>{
     d.front = $('#fFront').value;
-    const su = $('#fSub');    if(su) d.subject = su.value.trim() || SUBJECTS[0];
+    const su = $('#fSub');    if(su) d.subject = su.value.trim() || allSubjects()[0] || '未分类';
     const tp = $('#fTopic');  if(tp){ const v = tp.value.trim(); d.tags = v ? [v] : []; }
     d.hint = $('#fHint').value;
     const b = $('#fBack'); if(b) d.back = b.value;
@@ -1310,8 +1392,9 @@ async function vAdd(){
 
   /* ---- 归类：最近整组快捷填入，科目 / 子项也都能直接改 ---- */
   const fs = $('#fSub'), ft = $('#fTopic');
-  const markSubjects = ()=> app().querySelectorAll('[data-sub-v]').forEach(x=>
-    x.classList.toggle('on', x.dataset.subV===(fs?fs.value.trim():'')));
+  const markSubjects = ()=> app().querySelectorAll('[data-sub-v]').forEach(x=>{
+    const w=x.closest('.taxchip'); if(w) w.classList.toggle('on', x.dataset.subV===(fs?fs.value.trim():''));
+  });
   const markRecent = ()=> app().querySelectorAll('[data-loc-sub]').forEach(x=>
     x.classList.toggle('on', x.dataset.locSub===(fs?fs.value.trim():'') &&
       x.dataset.locTopic===(ft?ft.value.trim():'')));
@@ -1324,27 +1407,45 @@ async function vAdd(){
       d.tags = ft.value.trim() ? [ft.value.trim()] : [];
       paintTopics(); markRecent();
     });
+    box.querySelectorAll('[data-del-topic]').forEach(b=> b.onclick = async e=>{
+      e.stopPropagation(); sync();
+      const sub=fs.value.trim(), topic=b.dataset.delTopic;
+      if(!hideTopicChoice(sub,topic)) return;
+      if(ft.value.trim()===topic){ ft.value=''; d.tags=[]; }
+      await vAdd(); toast('考点选项已删除');
+    });
   };
   if(fs){
-    fs.oninput  = ()=>{ d.subject = fs.value.trim() || SUBJECTS[0];
+    fs.oninput  = ()=>{ d.subject = fs.value.trim() || allSubjects()[0] || '未分类';
       markSubjects(); markRecent(); };
     fs.onchange = paintTopics;
     app().querySelectorAll('[data-sub-v]').forEach(ch=> ch.onclick = ()=>{
       fs.value = ch.dataset.subV; d.subject = ch.dataset.subV;
       markSubjects(); paintTopics(); markRecent();
     });
+    app().querySelectorAll('[data-del-sub]').forEach(b=> b.onclick = async e=>{
+      e.stopPropagation(); sync();
+      const sub=b.dataset.delSub;
+      if(!hideSubjectChoice(sub)) return;
+      if(fs.value.trim()===sub){
+        fs.value=allSubjects()[0]||'未分类'; ft.value='';
+        d.subject=fs.value; d.tags=[];
+      }
+      await vAdd(); toast('科目选项已删除');
+    });
   }
   if(ft) ft.oninput = ()=>{
     const v = ft.value.trim(); d.tags = v ? [v] : [];
-    app().querySelectorAll('[data-topic-v]').forEach(x=>
-      x.classList.toggle('on', x.dataset.topicV===v));
+    app().querySelectorAll('[data-topic-v]').forEach(x=>{
+      const w=x.closest('.taxchip'); if(w) w.classList.toggle('on', x.dataset.topicV===v);
+    });
     markRecent();
   };
   app().querySelectorAll('[data-loc-sub]').forEach(ch=> ch.onclick = ()=>{
     if(!fs || !ft) return;
     fs.value = ch.dataset.locSub;
     ft.value = ch.dataset.locTopic;
-    d.subject = fs.value.trim() || SUBJECTS[0];
+    d.subject = fs.value.trim() || allSubjects()[0] || '未分类';
     d.tags = ft.value.trim() ? [ft.value.trim()] : [];
     markSubjects(); paintTopics(); markRecent();
   });
@@ -1433,6 +1534,8 @@ async function vAdd(){
     if(d.type==='cloze'  && d.front.indexOf('【')<0) return toast('还没挖空，用【】包住关键词');
     if(d.type==='qa'     && !d.back.trim())         return toast('答案还是空的');
     if(d.type==='points' && !d.points.length)       return toast('至少写一条采分点');
+    CAT.unhideSubject(d.subject);
+    if(topicOf(d)) CAT.unhideTopic(d.subject,topicOf(d));
     if(S.editing) delete d.aiUnverified;   // 你亲手改过 = 已核对
     d.locationAt = Date.now();             // 用于排序「最近归类」
     LAST.set(d.subject, topicOf(d));       // 下一道题默认接着归到这儿
@@ -1474,7 +1577,7 @@ function compress(file){
    7. 题库
    ======================================================================= */
 function topicRowHTML(){
-  const sub = SUBJECTS.concat(allSubjects()).indexOf(S.filter)>=0 ? S.filter : '';
+  const sub = allSubjects().includes(S.filter) ? S.filter : '';
   const ts = allTopics(sub);
   if(!ts.length) return '';
   return `<span class="chip ${S.topic?'':'on'}" data-t="">${sub?sub+' · 全部考点':'不分考点'}</span>`
@@ -1483,6 +1586,9 @@ function topicRowHTML(){
 }
 
 function vList(){
+  if(!['all','new','due','weak'].concat(allSubjects()).includes(S.filter)){
+    S.filter='all'; S.topic='';
+  }
   app().innerHTML = `
   <input class="input" id="fKw" style="margin:0 0 12px" placeholder="搜题干、考点或采分点" value="${esc(S.kw)}">
   <div id="filters">
@@ -1856,7 +1962,13 @@ function openAI(){
   document.body.style.overflow='hidden';
   renderAI();
 }
-function closeAI(){
+async function releaseAIItem(it){
+  if(!it) return;
+  if(it.url){ URL.revokeObjectURL(it.url); it.url=''; }
+  if(it.imgKey){ await DB.delImage(it.imgKey); delete S.imgURL[it.imgKey]; it.imgKey=null; }
+}
+async function closeAI(){
+  await Promise.all(AIP.items.map(releaseAIItem));
   $('#aiPane').classList.add('hidden');
   document.body.style.overflow='';
   AIP.items = [];
@@ -1879,7 +1991,7 @@ function renderAI(busy){
     ${AIP.items.map((it,i)=> resHTML(it,i)).join('')}
     ${(!AIP.items.length && !busy && ready)
       ? `<div class="warn">识别出来的东西一律要你过一眼再存。模型会认错字，也可能答错题——
-         截图里没写答案的，它给的答案会标成「未核对」。</div>` : ''}`;
+         截图里没写答案的，它给的答案会标成「未核对」。原图只供识别与核对，存题后自动删除。</div>` : ''}`;
 
   $('#aiClose').onclick = closeAI;
   const pk = $('#aiPick');
@@ -1903,8 +2015,10 @@ function resHTML(it,i){
     ${it.url?`<img src="${it.url}">`:''}
     <span class="lbl">科目</span>
     <input class="fld" data-f="subject" value="${esc(d.subject||'')}" list="subList">
+    <div class="chiprow ai-sub-chips">${subChipHTML(d.subject||'')}</div>
     <span class="lbl">考点 · 子项</span>
     <input class="fld" data-f="topic" value="${esc(d.topic||'')}" placeholder="留空也行">
+    <div class="chiprow ai-topic-chips">${topicChipHTML(d.subject||'',d.topic||'')}</div>
     <span class="lbl">题目</span>
     <textarea class="fld" data-f="front">${esc(d.front)}</textarea>
     <span class="lbl">采分点 · 一行一条${d.answerVerified?'':'<span class="unver">AI 推断 · 未核对</span>'}</span>
@@ -1923,36 +2037,74 @@ function resHTML(it,i){
 function bindRes(it,i){
   const box = $(`[data-res="${i}"]`);
   if(box){
-    box.querySelectorAll('[data-f]').forEach(f=> f.onchange = ()=>{
+    box.querySelectorAll('[data-f]').forEach(f=> f.oninput = ()=>{
       const k = f.dataset.f;
       it.data[k] = k==='points' ? linesToPts(f.value) : f.value;
     });
+
+    const fs=box.querySelector('[data-f="subject"]');
+    const ft=box.querySelector('[data-f="topic"]');
+    const markSubjects=()=>box.querySelectorAll('[data-sub-v]').forEach(ch=>{
+      const w=ch.closest('.taxchip'); if(w) w.classList.toggle('on',ch.dataset.subV===(fs.value||'').trim());
+    });
+    const paintTopics=()=>{
+      const row=box.querySelector('.ai-topic-chips'); if(!row) return;
+      row.innerHTML=topicChipHTML((fs.value||'').trim(),(ft.value||'').trim());
+      row.querySelectorAll('[data-topic-v]').forEach(ch=>ch.onclick=()=>{
+        ft.value=ch.dataset.topicV; it.data.topic=ft.value; paintTopics();
+      });
+      row.querySelectorAll('[data-del-topic]').forEach(b=>b.onclick=e=>{
+        e.stopPropagation();
+        const sub=(fs.value||'').trim(), topic=b.dataset.delTopic;
+        if(!hideTopicChoice(sub,topic)) return;
+        if((ft.value||'').trim()===topic){ ft.value=''; it.data.topic=''; }
+        paintTopics(); toast('考点选项已删除');
+      });
+    };
+    box.querySelectorAll('[data-sub-v]').forEach(ch=>ch.onclick=()=>{
+      fs.value=ch.dataset.subV; it.data.subject=fs.value;
+      markSubjects(); paintTopics();
+    });
+    box.querySelectorAll('[data-del-sub]').forEach(b=>b.onclick=e=>{
+      e.stopPropagation(); const sub=b.dataset.delSub;
+      if(!hideSubjectChoice(sub)) return;
+      if((fs.value||'').trim()===sub){
+        fs.value=allSubjects()[0]||'未分类'; ft.value='';
+        it.data.subject=fs.value; it.data.topic='';
+      }
+      const w=b.closest('.taxchip'); if(w) w.remove();
+      markSubjects(); paintTopics(); toast('科目选项已删除');
+    });
+    fs.onchange=()=>{ it.data.subject=fs.value; markSubjects(); paintTopics(); };
+    ft.oninput=()=>{ it.data.topic=ft.value; paintTopics(); };
   }
   const kp = $(`[data-keep="${i}"]`); if(kp) kp.onclick = ()=>keepRes(i);
-  const dp = $(`[data-drop="${i}"]`); if(dp) dp.onclick = ()=>{
-    if(AIP.items[i] && AIP.items[i].imgKey) DB.delImage(AIP.items[i].imgKey);
+  const dp = $(`[data-drop="${i}"]`); if(dp) dp.onclick = async ()=>{
+    await releaseAIItem(AIP.items[i]);
     AIP.items.splice(i,1); renderAI(); };
 }
 
 async function keepRes(i){
   const it = AIP.items[i], d = it.data;
   const pts = ptClean(Array.isArray(d.points) ? d.points : linesToPts(d.points));
-  if(!(d.front||'').trim() && !it.imgKey) return toast('题干是空的');
+  if(!(d.front||'').trim()) return toast('题干是空的');
   if(!pts.length) return toast('一条采分点都没有，先补一条');
 
   const c = blankCard();
   c.type = 'points';
-  c.subject = (d.subject||'').trim() || SUBJECTS[0];
+  c.subject = (d.subject||'').trim() || allSubjects()[0] || '未分类';
   c.tags = (d.topic||'').trim() ? [(d.topic||'').trim()] : [];
   c.front = d.front || '';
   c.points = pts;
   c.hint = (d.hint||'').trim();
-  c.image = it.imgKey || '';
+  c.image = '';                              // 原图只做识别，不跟着题目入库
   if(!d.answerVerified) c.aiUnverified = true;
   c.locationAt = Date.now();
+  CAT.unhideSubject(c.subject);
+  if(topicOf(c)) CAT.unhideTopic(c.subject,topicOf(c));
   LAST.set(c.subject, topicOf(c));
   await saveCard(c);
-  it.imgKey = null;                        // 图已经交给这张卡，丢弃时别删
+  await releaseAIItem(it);
 
   AIP.items.splice(i,1);
   renderAI();
@@ -1963,16 +2115,14 @@ async function runAI(files){
   if(!files.length) return;
   for(let i=0;i<files.length;i++){
     renderAI({pct: Math.round(i/files.length*100), msg:`正在认第 ${i+1} 张，共 ${files.length} 张…`});
-    let blob, key='', url='';
+    let blob, url='';
     try{
       blob = await compress(files[i]);
-      key  = 'img_'+Date.now().toString(36)+i;
-      await DB.putImage(key, blob);
       url  = URL.createObjectURL(blob);
       const data = await aiAnalyze(blob);
-      AIP.items.push({data:data, imgKey:key, url:url});
+      AIP.items.push({data:data, url:url});
     }catch(e){
-      if(key) await DB.delImage(key);
+      if(url) URL.revokeObjectURL(url);
       AIP.items.push({err: e.message || String(e)});
     }
   }
