@@ -19,7 +19,7 @@
   --base:17px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0}
+html,body{margin:0;padding:0;min-height:100%;min-height:100dvh}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
   font-size:var(--base); line-height:1.7; color:var(--ink); background:var(--paper);
@@ -29,7 +29,8 @@ body{
 button{font:inherit;color:inherit;border:none;background:none;cursor:pointer}
 input,textarea,select{font:inherit;color:inherit}
 
-#app{max-width:640px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 14px) 16px 96px}
+#app{max-width:640px;min-height:100vh;min-height:100dvh;margin:0 auto;
+  padding:calc(env(safe-area-inset-top) + 14px) 16px 96px}
 .hidden{display:none !important}
 
 /* ---- tabs ---- */
@@ -179,10 +180,15 @@ input,textarea,select{font:inherit;color:inherit}
 .lsn .now{font-size:1.12rem;line-height:1.9;min-height:120px;
   display:flex;align-items:center;justify-content:center;text-align:left}
 .lsn .play{width:88px;height:88px;border-radius:50%;background:var(--ink);color:#fff;
-  font-size:1.9rem;margin:16px auto;display:flex;align-items:center;justify-content:center}
+  font-size:1.9rem;margin:0 auto;display:flex;align-items:center;justify-content:center}
 .lsn .play.on{background:var(--gold)}
-.lsn .ctl{display:flex;gap:10px;justify-content:center;margin-top:6px}
-.lsn .ctl button{padding:10px 20px;background:#fff;border-radius:9px;font-size:.9rem}
+.lsn .transport{display:grid;grid-template-columns:1fr 88px 1fr;align-items:center;
+  gap:12px;margin:16px 0 8px}
+.lsn .transport .skip{min-height:48px;padding:10px 8px;background:var(--paper);
+  border-radius:10px;font-size:.9rem}
+.lsn .ctl{display:flex;gap:10px;justify-content:center;margin-top:12px}
+.lsn .ctl button{flex:1;padding:10px 12px;background:var(--paper);border-radius:9px;font-size:.9rem}
+.lsn .listen-hint{text-align:left;margin-top:14px}
 .seg{display:flex;gap:0;background:var(--paper);border-radius:9px;padding:3px;margin-top:9px}
 .seg button{flex:1;padding:9px 2px;border-radius:7px;font-size:.85rem;color:var(--mute);white-space:nowrap}
 .seg button.on{background:#fff;color:var(--ink);font-weight:600}
@@ -1057,7 +1063,7 @@ function renderDone(){
    5. 听背 —— 系统语音合成，通勤用
    ======================================================================= */
 const L = {queue:null, i:0, playing:false, gap:3, mode:'both', stop:false,
-           order:'seq', scope:'due', waiting:false, resume:null};
+           order:'seq', scope:'due', waiting:false, resume:null, hinted:false, run:0};
 
 function voiceFor(){
   const vs = speechSynthesis.getVoices().filter(v=>/^zh/i.test(v.lang));
@@ -1098,11 +1104,11 @@ function buildListenQueue(){
 }
 function ensureListenQueue(){
   if(L.queue) return;
-  L.queue = buildListenQueue(); L.i = 0;
+  L.queue = buildListenQueue(); L.i = 0; L.hinted = false;
 }
 function reshuffleListen(){
-  stopListen();
-  L.queue = buildListenQueue(); L.i = 0;
+  stopListen(false);
+  L.queue = buildListenQueue(); L.i = 0; L.hinted = false;
   vListen();
 }
 
@@ -1122,15 +1128,20 @@ function vListen(){
   <div class="card lsn">
     <span class="eyebrow">${L.i+1} / ${L.queue.length} · ${c?c.subject:''}${L.order==='rand'?' · 随机':''}</span>
     <div class="now" id="lNow">${c?esc(summary(c,60)):''}</div>
-    ${L.waiting
-      ? `<button class="play on" id="lGo">▶</button>
-         <div class="muted" style="margin:-6px 0 8px">想好了点一下，继续往下读</div>`
-      : `<button class="play${L.playing?' on':''}" id="lPlay">${L.playing?'❚❚':'▶'}</button>`}
-    <div class="ctl">
-      <button id="lPrev">上一题</button>
-      <button id="lMiss">这题没记住</button>
-      <button id="lNext">下一题</button>
+    <div class="transport">
+      <button class="skip" id="lPrev">上一题</button>
+      ${L.waiting
+        ? `<button class="play on" id="lGo" aria-label="继续">▶</button>`
+        : `<button class="play${L.playing?' on':''}" id="lPlay" aria-label="${L.playing?'暂停':'播放'}">${L.playing?'❚❚':'▶'}</button>`}
+      <button class="skip" id="lNext">下一题</button>
     </div>
+    ${L.waiting ? `<div class="muted" style="margin:-2px 0 8px">想好了点播放键，继续往下读</div>` : ''}
+    <div class="ctl">
+      <button id="lHint">${L.hinted?'收起提示':'提示'}</button>
+      <button id="lMiss">这题没记住</button>
+    </div>
+    ${L.hinted && c && (c.hint||'').trim()
+      ? `<div class="hintbox listen-hint"><span class="eyebrow">提示</span>${esc(c.hint)}</div>` : ''}
   </div>
   <div class="card">
     <span class="eyebrow">按什么顺序</span>
@@ -1170,6 +1181,11 @@ function vListen(){
   if(!$('#lPrev')) return;
   $('#lPrev').onclick = ()=>{ jump(-1); };
   $('#lNext').onclick = ()=>{ jump(1); };
+  $('#lHint').onclick = ()=>{
+    const cur = L.queue[L.i];
+    if(!cur || !(cur.hint||'').trim()) return toast('这题还没有填写提示');
+    L.hinted = !L.hinted; vListen();
+  };
   $('#lMiss').onclick = async ()=>{
     const cur = L.queue[L.i]; if(!cur) return;
     await saveCard(schedule(cur,0));
@@ -1185,15 +1201,17 @@ function vListen(){
 }
 
 function jump(d){
-  stopListen();
+  stopListen(false);
   L.i = Math.max(0, Math.min(L.queue.length-1, L.i+d));
-  vListen();
+  L.hinted = false;
+  startListen();
 }
-function stopListen(){
+function stopListen(rerender=true){
+  L.run++;
   L.stop = true; L.playing = false; speechSynthesis.cancel();
   if(L.resume){ const r = L.resume; L.resume = null; r(); }
   L.waiting = false;
-  vListen();
+  if(rerender) vListen();
 }
 
 // 停顿：秒数到就走；选了「不自动」就停在这儿，等点「继续」
@@ -1207,32 +1225,36 @@ function gapWait(){
 }
 
 async function startListen(){
+  const run = ++L.run;
   L.stop = false; L.playing = true; L.waiting = false; vListen();
   const setNow = t=>{ const el = $('#lNow'); if(el) el.textContent = t; };
 
-  while(!L.stop && L.i < L.queue.length){
+  while(run===L.run && !L.stop && L.i < L.queue.length){
     const c = L.queue[L.i];
     setNow(plain(c.front));
     await speak(frontSpeech(c));
-    if(L.stop) break;
+    if(run!==L.run || L.stop) break;
 
     await gapWait();
-    if(L.stop) break;
+    if(run!==L.run || L.stop) break;
 
     if(L.mode==='both'){
       const b = backSpeech(c);
       if(b){ setNow(b); await speak(b); }
-      if(L.stop) break;
-      if(L.gap===0){ await gapWait(); if(L.stop) break; }
+      if(run!==L.run || L.stop) break;
+      if(L.gap===0){ await gapWait(); if(run!==L.run || L.stop) break; }
       else await wait(700);
     }else if(L.gap>0){
       await wait(700);
     }
 
     L.i++;
+    L.hinted = false;
     if(L.i < L.queue.length) vListen();
   }
-  if(!L.stop){ L.playing=false; L.i = Math.min(L.i, L.queue.length-1); vListen(); toast('听完了'); }
+  if(run===L.run && !L.stop){
+    L.playing=false; L.i = Math.min(L.i, L.queue.length-1); vListen(); toast('听完了');
+  }
 }
 
 /* =======================================================================
@@ -2201,8 +2223,8 @@ function bindAISettings(){
    9. 启动
    ======================================================================= */
 document.querySelectorAll('#tabs button').forEach(b=> b.onclick = ()=>{
-  if(S.tab==='listen' && b.dataset.tab!=='listen') stopListen();
-  if(b.dataset.tab==='listen' && !L.playing){ L.queue = null; L.i = 0; }
+  if(S.tab==='listen' && b.dataset.tab!=='listen') stopListen(false);
+  if(b.dataset.tab==='listen' && !L.playing){ L.queue = null; L.i = 0; L.hinted = false; }
   if(b.dataset.tab==='add' && S.tab!=='add' && S.editing){ S.draft=null; S.editing=false; }
   S.tab = b.dataset.tab; render();
 });
