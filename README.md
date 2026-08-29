@@ -2,9 +2,9 @@
 
 装完是主屏幕上一个独立图标，全屏打开，没有地址栏，断网能用，数据全在手机里。不用 Mac、不用证书、不会过期。
 
-包里有 6 个核心 App 文件：`index.html`、`sw.js`、`manifest.json`、三个主屏幕图标；`assets/ranks` 里另有 6 张 Riot 官方段位徽章，并带说明书和 Windows 一键发布工具。
+包里有 6 个核心 App 文件：`index.html`、`sw.js`、`manifest.json`、三个主屏幕图标；6 张 Riot 官方段位徽章已经直接嵌进 `index.html`，另带说明书和 Windows 一键发布工具。
 
-v12 新增：青铜、白银、黄金、铂金、钻石、最强王者改用 Riot 官方原始徽章；备份会连段位、每日目标、倒计时、提醒、字号和 API Key 一起保存；统计页可设置每日背书提醒，并可生成 iPhone 系统日历提醒。
+v13 修复：段位图标不再依赖容易漏传的 `assets` 文件夹，发布核心文件后就能直接显示。v12 的段位备份、每日提醒和 iPhone 系统日历提醒全部保留。
 
 ---
 
@@ -16,7 +16,7 @@ iPhone 要求网页必须从 **https 地址**打开，才能装成主屏幕应�
 
 1. 去 <https://github.com> 注册账号。
 2. 右上角 `+` → **New repository**。仓库名填 `beishu`，选 **Public**，点 Create。
-3. 在仓库页点 **Add file → Upload files**，把解压后 `beishu-ios` 文件夹里的**全部内容**拖进去（包括 `assets` 文件夹），下拉点 **Commit changes**。
+3. 在仓库页点 **Add file → Upload files**，上传 `index.html`、`sw.js`、`manifest.json`、`icon-180.png`、`icon-192.png`、`icon-512.png`（`README.md` 可一起上传），下拉点 **Commit changes**。
 4. 点 **Settings** → 左边 **Pages** → Source 选 `Deploy from a branch`，分支选 `main`、目录选 `/ (root)` → **Save**。
 5. 等一两分钟刷新，页面顶部会出现网址，形如：
 
@@ -38,9 +38,9 @@ v10 起，iPhone App 联网打开时会自动检查并切换新版。通常不�
 
 #### 手动上传（备用）
 
-仍可把新版文件上传到仓库根目录覆盖；v12 还要把 `assets` 文件夹一起上传。`sw.js` 已升级为 v12，发布后 App 会自动处理旧缓存。
+仍可把新版核心文件上传到仓库根目录覆盖。`sw.js` 已升级为 v13，发布后 App 会自动处理旧缓存；段位图标已嵌入 `index.html`，不需要再单独上传图片文件夹。
 
-**题目、段位、提醒和 API Key 都不会丢。** 同一个网址更新只换代码，数据仍存在手机本地。不放心的话更新前在「统计 → 导出」存一份；v12 的备份也会把这些设置一起带上。
+**题目、段位、提醒和 API Key 都不会丢。** 同一个网址更新只换代码，数据仍存在手机本地。不放心的话更新前在「统计 → 导出」存一份；v13 的备份也会把这些设置一起带上。
 
 以前录的题也照常能用：老的采分点是一行行的纯文字，这版多了「小点」这一层，老题目不受影响，想细分的时候进去编辑加就行。
 
@@ -173,7 +173,7 @@ v10 起，iPhone App 联网打开时会自动检查并切换新版。通常不�
 
 从零爬到最强王者，要 60 天达标。
 
-徽章使用 Riot Developer Portal 提供的 `ranked-emblems-latest.zip` 原始图片，本地打包在 `assets/ranks`，所以断网也能显示。来源：<https://developer.riotgames.com/docs/lol>。League of Legends 与 Riot Games 为 Riot Games, Inc. 的商标；本个人工具与 Riot Games 无隶属或赞助关系。
+徽章来自 Riot Developer Portal 提供的 `ranked-emblems-latest.zip`，按手机实际显示尺寸压缩后直接嵌入 `index.html`，所以不会再因漏传文件夹而变成问号，断网也能显示。来源：<https://developer.riotgames.com/docs/lol>。League of Legends 与 Riot Games 为 Riot Games, Inc. 的商标；本个人工具与 Riot Games 无隶属或赞助关系。
 
 **什么叫「达标」**：当天复习的题数 ≥ 每日目标。目标默认 **20 题**，在段位页里能改（改小容易连上，改大升得快）。改动只影响以后，已经结算过的日子不重算。
 
@@ -329,10 +329,10 @@ v12 起，备份会同时保存：**段位和打卡记录、每日目标、复�
 改完 `index.html` 后，仍要把 `sw.js` 第 2 行的版本号加一：
 
 ```js
-const V = 'beishu-v12';   // 现在是 v12，下次改时加到 v13
+const V = 'beishu-v13';   // 现在是 v13，下次改时加到 v14
 ```
 
-双击包里的 `一键发布更新.bat` 即可提交到已绑定的 GitHub 仓库。v12 会在联网启动时优先读取最新页面，并自动替换旧缓存；「统计」页也有手动检查按钮。
+双击包里的 `一键发布更新.bat` 即可提交到已绑定的 GitHub 仓库。v13 会在联网启动时优先读取最新页面，并自动替换旧缓存；「统计」页也有手动检查按钮。
 
 几个常改的地方，都在 `index.html` 里：
 
@@ -341,7 +341,7 @@ const V = 'beishu-v12';   // 现在是 v12，下次改时加到 v13
 - 采分点 / 小点的数据结构 → `ptObj()`、`ptPack()` 那几个小函数
 - 复习间隔 → `schedule()` 和上面的 `EBB` 数组
 - 段位顺序、每段几颗星 → `TIERS` 数组和 `rankUp()` / `rankDown()`
-- 段位徽章图片 → `assets/ranks` 和 `TIERS` 数组
+- 段位徽章图片 → `RANK_ICONS` 和 `TIERS` 数组（都在 `index.html`）
 - 缺席扣几颗星 → `settleRank()` 里那句 `rankDown(r)`
 - 默认每日目标 → `GOAL_DEFAULT`
 
