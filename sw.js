@@ -1,7 +1,10 @@
 // 改动 index.html 后，把版本号 +1；v10 起会自动发现并切换新版
-const V = 'beishu-v11';
+const V = 'beishu-v12';
 const FILES = ['./', './index.html', './manifest.json',
-               './icon-180.png', './icon-192.png', './icon-512.png'];
+               './icon-180.png', './icon-192.png', './icon-512.png',
+               './assets/ranks/bronze.png', './assets/ranks/silver.png',
+               './assets/ranks/gold.png', './assets/ranks/platinum.png',
+               './assets/ranks/diamond.png', './assets/ranks/challenger.png'];
 
 self.addEventListener('install', e => {
   const freshFiles = FILES.map(f=>new Request(f,{cache:'reload'}));
@@ -22,6 +25,19 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('message', e => {
   if(e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const target = new URL('./index.html', self.location.href).href;
+  e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>{
+    const open = cs.find(c=>c.url.startsWith(self.registration.scope));
+    if(open){
+      return (typeof open.navigate==='function' ? open.navigate(target).catch(()=>open) : Promise.resolve(open))
+        .then(c=>c && c.focus ? c.focus() : undefined);
+    }
+    return self.clients.openWindow ? self.clients.openWindow(target) : undefined;
+  }));
 });
 
 // 页面联网时优先取最新版；断网时退回本地缓存。图标等静态文件仍缓存优先。
